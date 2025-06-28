@@ -3,4 +3,5 @@ flask_cors
 nltk
 spacy
 textblob
-uvicorn
+flask
+gunicorn
