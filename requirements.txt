@@ -1,7 +1,6 @@
 flask
-flask_cors
+flask-cors
 nltk
 spacy
 textblob
-flask
 gunicorn

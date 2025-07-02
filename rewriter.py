@@ -405,28 +405,28 @@ class TextRewriteService:
             
             for i, sentence in enumerate(sentences):
                 # Apply various transformations with INCREASED probability
-                if random.random() < 0.9:  # Increased from 0.8
+                if random.random() < 0.95:
                     sentence = self._vary_sentence_structure(sentence)
-                if random.random() < 0.7:  # Increased from 0.6
+                if random.random() < 0.85:
                     sentence = self._replace_synonyms(sentence)
-                if random.random() < 0.6:  # Increased from 0.5
+                if random.random() < 0.75:
                     sentence = self._add_natural_noise(sentence)
-                if random.random() < 0.4:  # New: Add conversational elements
+                if random.random() < 0.6:
                     sentence = self._add_conversational_elements(sentence)
-                if random.random() < 0.3:  # New: Add natural imperfections
+                if random.random() < 0.5:
                     sentence = self._add_natural_imperfections(sentence)
                 
                 transformed.append(sentence)
             
             # More aggressive sentence reordering
-            if len(transformed) > 2 and random.random() < 0.5:  # Increased from 0.4
+            if len(transformed) > 2 and random.random() < 0.6:  # Increased from 0.5
                 if len(transformed) > 3:
                     middle = transformed[1:-1]
                     random.shuffle(middle)
                     transformed = [transformed[0]] + middle + [transformed[-1]]
             
             # More frequent contextual filler addition
-            if len(transformed) > 1 and random.random() < 0.5:  # Increased from 0.4
+            if len(transformed) > 1 and random.random() < 0.6:  # Increased from 0.5
                 filler = self._get_contextual_filler(transformed)
                 if filler:
                     # Insert at random position (not just end)
@@ -434,7 +434,7 @@ class TextRewriteService:
                     transformed.insert(insert_pos, filler)
             
             # New: Add personal opinions and subjective language
-            if random.random() < 0.3:
+            if random.random() < 0.4: # Increased from 0.3
                 transformed = self._add_personal_touch(transformed)
             
             # New: Vary sentence length and complexity
@@ -472,7 +472,9 @@ class TextRewriteService:
         transitions = [
             "Furthermore, ", "Additionally, ", "Moreover, ", "Notably, ",
             "Significantly, ", "Importantly, ", "Specifically, ", "Indeed, ",
-            "Particularly, ", "Evidently, ", "Consequently, ", "Subsequently, ",
+            "Particularly, ", "Evidently, ",
+
+            "Consequently, ", "Subsequently, ",
             "Interestingly, ", "Remarkably, ", "Essentially, ", "Ultimately, ",
             "Clearly, ", "Obviously, ", "Undoubtedly, ", "Certainly, "
         ]
@@ -481,9 +483,16 @@ class TextRewriteService:
             return sentence
         
         # Increased probability from 0.2 to 0.5
-        if random.random() < 0.5:
+        if random.random() < 0.6: # Increased from 0.5
             transition = random.choice(transitions)
-            return transition + sentence.lower()
+            # Check if the sentence starts with a quote, and if so, place the transition before it.
+            if sentence.strip().startswith('"'):
+                match = re.match(r'(\s*")', sentence)
+                quote_char = match.group(1)
+                rest_of_sentence = sentence[len(quote_char):]
+                return f'{quote_char}{transition}{rest_of_sentence.lower()}'
+            else:
+                return transition + sentence[0].lower() + sentence[1:]
         
         return sentence
     
@@ -491,9 +500,11 @@ class TextRewriteService:
         """Simple clause rearrangement"""
         if ', ' in sentence and sentence.count(',') == 1:
             parts = sentence.split(', ', 1)
-            if len(parts) == 2 and random.random() < 0.3:
+            if len(parts) == 2 and random.random() < 0.4: # Increased from 0.3
                 part1, part2 = parts
-                return f"{part2}, {part1.lower()}"
+                # Avoid rearranging if it creates an awkward sentence
+                if len(part1.split()) > 2 and len(part2.split()) > 2:
+                    return f"{part2.capitalize()}, {part1.lower()}"
         
         return sentence
     
@@ -510,7 +521,7 @@ class TextRewriteService:
         }
         
         # Always expand contractions for academic tone (increased probability)
-        if random.random() < 0.8:
+        if random.random() < 0.9: # Increased from 0.8
             for contraction, expansion in contractions.items():
                 if contraction in sentence.lower():
                     # Case-sensitive replacement
@@ -523,7 +534,7 @@ class TextRewriteService:
         """Intelligently replace words with synonyms - MORE AGGRESSIVE"""
         words = sentence.split()
         modifications = 0
-        max_modifications = max(1, len(words) // 4)  # Allow more modifications
+        max_modifications = max(2, len(words) // 3)  # Allow more modifications, up from //4
         
         for i, word in enumerate(words):
             if modifications >= max_modifications:
@@ -538,7 +549,7 @@ class TextRewriteService:
                 continue
             
             # INCREASED probability from 0.15 to 0.4
-            if random.random() < 0.4:
+            if random.random() < 0.5: # Increased from 0.4
                 synonym, err = self.synonym_repo.get_synonym(clean_word)
                 if not err and synonym:
                     # Preserve original word formatting
@@ -615,7 +626,7 @@ class TextRewriteService:
             if replacements_made >= max_replacements:
                 break
                 
-            if old in sentence.lower() and random.random() < 0.3:  # Increased from 0.15
+            if old in sentence.lower() and random.random() < 0.4:  # Increased from 0.3
                 new_phrase = random.choice(new_options)
                 # Case-sensitive replacement
                 sentence = re.sub(re.escape(old), new_phrase, sentence, count=1, flags=re.IGNORECASE)
@@ -644,12 +655,12 @@ class TextRewriteService:
         ]
         
         # Add starter phrase
-        if random.random() < 0.2 and not sentence.startswith(("You know,", "Well,", "Actually,")):
+        if random.random() < 0.25 and not sentence.startswith(("You know,", "Well,", "Actually,")): # Increased from 0.2
             starter = random.choice(conversational_starters)
             sentence = starter + sentence.lower()
         
         # Add connector phrase in the middle
-        if random.random() < 0.15 and len(sentence.split()) > 8:
+        if random.random() < 0.2 and len(sentence.split()) > 8: # Increased from 0.15
             words = sentence.split()
             if len(words) > 4:
                 insert_pos = random.randint(2, len(words) - 2)
@@ -668,22 +679,22 @@ class TextRewriteService:
         filler_words = ["um", "uh", "like", "you know", "sort of", "kind of"]
         
         # Add repetition (humans sometimes repeat words)
-        if random.random() < 0.1:
+        if random.random() < 0.15: # Increased from 0.1
             words = sentence.split()
             if len(words) > 3:
-                repeat_word = random.choice([w for w in words if len(w) > 3])
+                repeat_word = random.choice([w for w in words if len(w) > 3 and w.isalpha()])
                 if repeat_word in words:
                     insert_pos = words.index(repeat_word) + 1
                     words.insert(insert_pos, repeat_word)
                     sentence = " ".join(words)
         
         # Add incomplete thoughts (with ellipsis)
-        if random.random() < 0.05:
+        if random.random() < 0.08: # Increased from 0.05
             if not sentence.endswith("..."):
                 sentence = sentence.rstrip(".") + "..."
         
         # Add parenthetical asides
-        if random.random() < 0.1:
+        if random.random() < 0.15: # Increased from 0.1
             asides = [
                 " (which is interesting)", " (I think)", " (you know)", 
                 " (obviously)", " (basically)", " (essentially)",
@@ -717,7 +728,7 @@ class TextRewriteService:
         ]
         
         # Add personal phrase to a random sentence
-        if random.random() < 0.3:
+        if random.random() < 0.4: # Increased from 0.3
             target_idx = random.randint(0, len(sentences) - 1)
             personal_phrase = random.choice(personal_phrases)
             sentences[target_idx] = personal_phrase + " " + sentences[target_idx].lower()
@@ -729,7 +740,7 @@ class TextRewriteService:
         ]
         
         for i, sentence in enumerate(sentences):
-            if random.random() < 0.15:
+            if random.random() < 0.2: # Increased from 0.15
                 marker = random.choice(opinion_markers)
                 # Insert before the last word
                 words = sentence.split()
@@ -749,7 +760,7 @@ class TextRewriteService:
         while i < len(sentences) - 1:
             if (len(sentences[i].split()) < 8 and 
                 len(sentences[i+1].split()) < 8 and 
-                random.random() < 0.2):
+                random.random() < 0.3): # Increased from 0.2
                 # Combine with a conjunction
                 conjunctions = [" and", " but", " however,", " moreover,", " furthermore,"]
                 conjunction = random.choice(conjunctions)
@@ -760,7 +771,7 @@ class TextRewriteService:
         
         # Sometimes break long sentences
         for i, sentence in enumerate(sentences):
-            if len(sentence.split()) > 20 and random.random() < 0.3:
+            if len(sentence.split()) > 20 and random.random() < 0.4: # Increased from 0.3
                 words = sentence.split()
                 if len(words) > 15:
                     # Find a good break point (after a comma or conjunction)
@@ -905,7 +916,12 @@ def rewrite_text_ultra(text: str) -> Tuple[str, Optional[str]]:
         if err2:
             return result, err2
         
-        return result2, None
+        # Apply a third pass for final polish and variation
+        result3, err3 = service.rewrite_text_with_modifications(result2)
+        if err3:
+            return result2, err3
+
+        return result3, None
     except Exception as e:
         logger.error(f"Error in rewrite_text_ultra: {str(e)}")
         return text, f"Ultra rewrite error: {str(e)}"
