@@ -163,7 +163,7 @@ class LocalRefinementRepository:
     def _improve_sentence_nltk(self, sentence: str) -> str:
         """Improve sentence using NLTK"""
         if not sentence.strip():
-            return sentence
+            return ""
         
         # Basic improvements
         sentence = sentence.strip()
@@ -175,15 +175,9 @@ class LocalRefinementRepository:
         improved_words = []
         
         for word in words:
-            if word.isalpha() and len(word) > 4 and random.random() < 0.1:
-                synonym = self._get_wordnet_synonym(word)
-                if synonym and synonym != word.lower():
-                    # Preserve original capitalization
-                    if word[0].isupper():
-                        synonym = synonym.capitalize()
-                    improved_words.append(synonym)
-                else:
-                    improved_words.append(word)
+            synonym = self._get_wordnet_synonym(word)
+            if synonym and self._check_semantic_similarity(word, synonym) and self._is_contextually_appropriate(word, synonym, sentence):
+                improved_words.append(synonym)
             else:
                 improved_words.append(word)
         
@@ -215,31 +209,17 @@ class LocalRefinementRepository:
     def _check_semantic_similarity(self, original_word: str, synonym: str) -> bool:
         """Check if synonym is semantically similar to original word"""
         try:
-            original_synsets = wordnet.synsets(original_word.lower())
-            synonym_synsets = wordnet.synsets(synonym.lower())
+            synsets1 = wordnet.synsets(original_word)
+            synsets2 = wordnet.synsets(synonym)
             
-            if not original_synsets or not synonym_synsets:
-                return False
-            
-            # Check if they share any synsets (exact match)
-            for orig_synset in original_synsets:
-                for syn_synset in synonym_synsets:
-                    if orig_synset == syn_synset:
-                        return True
-            
-            # Check path similarity (how close they are in the WordNet hierarchy)
-            max_similarity = 0
-            for orig_synset in original_synsets[:2]:  # Check first 2 synsets
-                for syn_synset in synonym_synsets[:2]:
-                    try:
-                        similarity = orig_synset.path_similarity(syn_synset)
+            if synsets1 and synsets2:
+                max_similarity = 0
+                for synset1 in synsets1:
+                    for synset2 in synsets2:
+                        similarity = synset1.wup_similarity(synset2)
                         if similarity and similarity > max_similarity:
                             max_similarity = similarity
-                    except:
-                        continue
-            
-            # Return True if similarity is above threshold
-            return max_similarity > 0.3
+                return max_similarity > 0.7 # Increased threshold for better matches
             
         except Exception:
             return False
@@ -405,28 +385,28 @@ class TextRewriteService:
             
             for i, sentence in enumerate(sentences):
                 # Apply various transformations with INCREASED probability
-                if random.random() < 0.95:
+                if random.random() < 0.7: # Reduced from 0.95
                     sentence = self._vary_sentence_structure(sentence)
-                if random.random() < 0.85:
+                if random.random() < 0.6: # Reduced from 0.85
                     sentence = self._replace_synonyms(sentence)
-                if random.random() < 0.75:
+                if random.random() < 0.3: # Reduced from 0.75
                     sentence = self._add_natural_noise(sentence)
-                if random.random() < 0.6:
+                if random.random() < 0.2: # Reduced from 0.6
                     sentence = self._add_conversational_elements(sentence)
-                if random.random() < 0.5:
+                if random.random() < 0.1: # Reduced from 0.5
                     sentence = self._add_natural_imperfections(sentence)
                 
                 transformed.append(sentence)
             
             # More aggressive sentence reordering
-            if len(transformed) > 2 and random.random() < 0.6:  # Increased from 0.5
+            if len(transformed) > 2 and random.random() < 0.4:  # Reduced from 0.6
                 if len(transformed) > 3:
                     middle = transformed[1:-1]
                     random.shuffle(middle)
                     transformed = [transformed[0]] + middle + [transformed[-1]]
             
             # More frequent contextual filler addition
-            if len(transformed) > 1 and random.random() < 0.6:  # Increased from 0.5
+            if len(transformed) > 1 and random.random() < 0.3:  # Reduced from 0.6
                 filler = self._get_contextual_filler(transformed)
                 if filler:
                     # Insert at random position (not just end)
@@ -434,7 +414,7 @@ class TextRewriteService:
                     transformed.insert(insert_pos, filler)
             
             # New: Add personal opinions and subjective language
-            if random.random() < 0.4: # Increased from 0.3
+            if random.random() < 0.2: # Reduced from 0.4
                 transformed = self._add_personal_touch(transformed)
             
             # New: Vary sentence length and complexity
@@ -483,7 +463,7 @@ class TextRewriteService:
             return sentence
         
         # Increased probability from 0.2 to 0.5
-        if random.random() < 0.6: # Increased from 0.5
+        if random.random() < 0.4: # Reduced from 0.6
             transition = random.choice(transitions)
             # Check if the sentence starts with a quote, and if so, place the transition before it.
             if sentence.strip().startswith('"'):
@@ -500,10 +480,10 @@ class TextRewriteService:
         """Simple clause rearrangement"""
         if ', ' in sentence and sentence.count(',') == 1:
             parts = sentence.split(', ', 1)
-            if len(parts) == 2 and random.random() < 0.4: # Increased from 0.3
+            if len(parts) == 2 and random.random() < 0.3: # Reduced from 0.4
                 part1, part2 = parts
                 # Avoid rearranging if it creates an awkward sentence
-                if len(part1.split()) > 2 and len(part2.split()) > 2:
+                if len(part1.split()) > 2 and len(part2.split()) > 2 and part1[0].islower():
                     return f"{part2.capitalize()}, {part1.lower()}"
         
         return sentence
@@ -521,7 +501,7 @@ class TextRewriteService:
         }
         
         # Always expand contractions for academic tone (increased probability)
-        if random.random() < 0.9: # Increased from 0.8
+        if random.random() < 0.8: # Reduced from 0.9
             for contraction, expansion in contractions.items():
                 if contraction in sentence.lower():
                     # Case-sensitive replacement
@@ -534,7 +514,7 @@ class TextRewriteService:
         """Intelligently replace words with synonyms - MORE AGGRESSIVE"""
         words = sentence.split()
         modifications = 0
-        max_modifications = max(2, len(words) // 3)  # Allow more modifications, up from //4
+        max_modifications = max(1, len(words) // 5)  # Allow fewer modifications, up from //3
         
         for i, word in enumerate(words):
             if modifications >= max_modifications:
@@ -544,14 +524,14 @@ class TextRewriteService:
             clean_word = re.sub(r'[^\w]', '', word).lower()
             
             # Skip if too short or too common
-            if (len(clean_word) < 3 or  # Reduced from 4 to 3
+            if (len(clean_word) < 4 or  # Increased from 3
                 self._is_common_word(clean_word)):
                 continue
             
             # INCREASED probability from 0.15 to 0.4
-            if random.random() < 0.5: # Increased from 0.4
+            if random.random() < 0.3: # Reduced from 0.5
                 synonym, err = self.synonym_repo.get_synonym(clean_word)
-                if not err and synonym:
+                if not err and synonym and self._check_semantic_similarity(clean_word, synonym) and self._is_contextually_appropriate(clean_word, synonym, sentence):
                     # Preserve original word formatting
                     new_word = self._preserve_word_format(word, synonym)
                     words[i] = new_word
@@ -626,7 +606,7 @@ class TextRewriteService:
             if replacements_made >= max_replacements:
                 break
                 
-            if old in sentence.lower() and random.random() < 0.4:  # Increased from 0.3
+            if old in sentence.lower() and random.random() < 0.2:  # Reduced from 0.4
                 new_phrase = random.choice(new_options)
                 # Case-sensitive replacement
                 sentence = re.sub(re.escape(old), new_phrase, sentence, count=1, flags=re.IGNORECASE)
@@ -655,12 +635,12 @@ class TextRewriteService:
         ]
         
         # Add starter phrase
-        if random.random() < 0.25 and not sentence.startswith(("You know,", "Well,", "Actually,")): # Increased from 0.2
+        if random.random() < 0.1: # Reduced from 0.25
             starter = random.choice(conversational_starters)
             sentence = starter + sentence.lower()
         
         # Add connector phrase in the middle
-        if random.random() < 0.2 and len(sentence.split()) > 8: # Increased from 0.15
+        if random.random() < 0.1: # Reduced from 0.2
             words = sentence.split()
             if len(words) > 4:
                 insert_pos = random.randint(2, len(words) - 2)
@@ -679,7 +659,7 @@ class TextRewriteService:
         filler_words = ["um", "uh", "like", "you know", "sort of", "kind of"]
         
         # Add repetition (humans sometimes repeat words)
-        if random.random() < 0.15: # Increased from 0.1
+        if random.random() < 0.05: # Reduced from 0.15
             words = sentence.split()
             if len(words) > 3:
                 repeat_word = random.choice([w for w in words if len(w) > 3 and w.isalpha()])
@@ -689,12 +669,12 @@ class TextRewriteService:
                     sentence = " ".join(words)
         
         # Add incomplete thoughts (with ellipsis)
-        if random.random() < 0.08: # Increased from 0.05
+        if random.random() < 0.02: # Reduced from 0.08
             if not sentence.endswith("..."):
                 sentence = sentence.rstrip(".") + "..."
         
         # Add parenthetical asides
-        if random.random() < 0.15: # Increased from 0.1
+        if random.random() < 0.05: # Reduced from 0.15
             asides = [
                 " (which is interesting)", " (I think)", " (you know)", 
                 " (obviously)", " (basically)", " (essentially)",
@@ -728,7 +708,7 @@ class TextRewriteService:
         ]
         
         # Add personal phrase to a random sentence
-        if random.random() < 0.4: # Increased from 0.3
+        if random.random() < 0.15: # Reduced from 0.4
             target_idx = random.randint(0, len(sentences) - 1)
             personal_phrase = random.choice(personal_phrases)
             sentences[target_idx] = personal_phrase + " " + sentences[target_idx].lower()
@@ -740,7 +720,7 @@ class TextRewriteService:
         ]
         
         for i, sentence in enumerate(sentences):
-            if random.random() < 0.2: # Increased from 0.15
+            if random.random() < 0.1: # Reduced from 0.2
                 marker = random.choice(opinion_markers)
                 # Insert before the last word
                 words = sentence.split()
@@ -758,11 +738,11 @@ class TextRewriteService:
         # Sometimes combine short sentences
         i = 0
         while i < len(sentences) - 1:
-            if (len(sentences[i].split()) < 8 and 
-                len(sentences[i+1].split()) < 8 and 
-                random.random() < 0.3): # Increased from 0.2
+            if (len(sentences[i].split()) < 10 and # Increased from 8
+                len(sentences[i+1].split()) < 10 and # Increased from 8
+                random.random() < 0.2): # Reduced from 0.3
                 # Combine with a conjunction
-                conjunctions = [" and", " but", " however,", " moreover,", " furthermore,"]
+                conjunctions = [" and", ", but", "; however,", ", and moreover,", ", and furthermore,"]
                 conjunction = random.choice(conjunctions)
                 sentences[i] = sentences[i].rstrip(".") + conjunction + " " + sentences[i+1].lower()
                 sentences.pop(i+1)
@@ -771,9 +751,9 @@ class TextRewriteService:
         
         # Sometimes break long sentences
         for i, sentence in enumerate(sentences):
-            if len(sentence.split()) > 20 and random.random() < 0.4: # Increased from 0.3
+            if len(sentence.split()) > 25 and random.random() < 0.5: # Increased from 0.4
                 words = sentence.split()
-                if len(words) > 15:
+                if len(words) > 20: # Increased from 15
                     # Find a good break point (after a comma or conjunction)
                     break_point = len(words) // 2
                     for j, word in enumerate(words):
@@ -916,12 +896,7 @@ def rewrite_text_ultra(text: str) -> Tuple[str, Optional[str]]:
         if err2:
             return result, err2
         
-        # Apply a third pass for final polish and variation
-        result3, err3 = service.rewrite_text_with_modifications(result2)
-        if err3:
-            return result2, err3
-
-        return result3, None
+        return result2, None
     except Exception as e:
         logger.error(f"Error in rewrite_text_ultra: {str(e)}")
         return text, f"Ultra rewrite error: {str(e)}"
