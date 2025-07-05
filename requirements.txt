@@ -4,3 +4,10 @@ nltk
 spacy
 textblob
 gunicorn
+torch
+transformers
+numpy
+scipy
+scikit-learn
+joblib
+requests
