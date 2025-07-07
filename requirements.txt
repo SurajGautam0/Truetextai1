@@ -11,3 +11,11 @@ scipy
 scikit-learn
 joblib
 requests
+
+# spaCy model required:
+# Must be installed via build command or install.sh:
+# python -m spacy download en_core_web_sm
+
+# NLTK data required:
+# punkt, wordnet, averaged_perceptron_tagger, omw-1.4
+# Must be downloaded during build (NOT at runtime)
