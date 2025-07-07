@@ -7,558 +7,458 @@ import re
 from typing import List, Dict, Optional, Tuple
 import logging
 
+# NLTK is a powerful library for natural language processing.
 import nltk
 from nltk.tokenize import sent_tokenize, word_tokenize
-from nltk.stem import SnowballStemmer
-from nltk.corpus import wordnet
 from nltk.tokenize.treebank import TreebankWordDetokenizer
+from nltk.corpus import wordnet
 
-# spaCy imports with fallback
+# spaCy offers more advanced, context-aware NLP features.
 try:
     import spacy
     from textblob import TextBlob
     ADVANCED_NLP_AVAILABLE = True
 except ImportError:
     ADVANCED_NLP_AVAILABLE = False
-    logging.warning("spaCy/TextBlob not available. Install with: pip install spacy textblob")
+    logging.warning("spaCy/TextBlob not available. For better results, install with: pip install spacy textblob && python -m spacy download en_core_web_sm")
 
-class TextRewriter:
-    """Enhanced text rewriting service with optimized parameters to reduce unnecessary words"""
+# --- NLTK Data Download ---
+def download_nltk_data():
+    """
+    Downloads necessary NLTK data packages if they are not already present.
+    Handles potential download errors gracefully.
+    """
+    required_nltk_data = [
+        ('punkt', 'tokenizers/punkt'),
+        ('wordnet', 'corpora/wordnet'),
+        ('averaged_perceptron_tagger', 'taggers/averaged_perceptron_tagger'),
+        ('omw-1.4', 'corpora/omw-1.4')
+    ]
+    
+    for package_id, path in required_nltk_data:
+        try:
+            nltk.data.find(path)
+        except LookupError:
+            print(f"NLTK data package '{package_id}' not found. Downloading...")
+            try:
+                nltk.download(package_id, quiet=True)
+                print(f"Successfully downloaded '{package_id}'.")
+            except Exception as e:
+                print(f"Error downloading '{package_id}': {e}. The script might not function optimally.")
+
+# Automatically download required data on startup.
+download_nltk_data()
+
+# --- Logging Configuration ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# --- Core Classes ---
+
+class LocalRefinementRepository:
+    """
+    Handles initial text cleaning and refinement using the best available tools (spaCy or NLTK).
+    This class focuses on grammar, punctuation, and basic structural improvements.
+    """
     
     def __init__(self):
-        self._initialize_nltk()
-        self._initialize_services()
-        self._load_resources()
-        
-    def _initialize_nltk(self):
-        """Initialize NLTK with required data"""
-        required_nltk_data = [
-            ('punkt', 'tokenizers/punkt'),
-            ('wordnet', 'corpora/wordnet'),
-            ('averaged_perceptron_tagger', 'taggers/averaged_perceptron_tagger'),
-            ('omw-1.4', 'corpora/omw-1.4')
-        ]
-        
-        for data_package, path in required_nltk_data:
-            try:
-                nltk.data.find(path)
-            except LookupError:
-                try:
-                    nltk.download(data_package, quiet=True)
-                except Exception as e:
-                    logging.warning(f"Error downloading {data_package}: {e}")
-
-    def _initialize_services(self):
-        """Initialize NLP services"""
+        """Initializes the repository, loading spaCy if available."""
         self.nlp = None
         self.advanced_features = ADVANCED_NLP_AVAILABLE
         
         if self.advanced_features:
             try:
                 self.nlp = spacy.load("en_core_web_sm")
-                logging.info("Loaded spaCy model for advanced text processing")
+                logger.info("Loaded spaCy model for advanced text processing.")
             except OSError:
-                logging.warning("spaCy model not found. Using NLTK-based processing")
+                logger.warning("spaCy model 'en_core_web_sm' not found. Falling back to NLTK. For better performance, run: python -m spacy download en_core_web_sm")
                 self.advanced_features = False
         
-        self.stemmer = SnowballStemmer('english')
-        self.detokenizer = TreebankWordDetokenizer()
+        if not self.advanced_features:
+            logger.info("Using NLTK-based text refinement as spaCy is not available.")
     
-    def _load_resources(self):
-        """Load transition words and other resources"""
-        self.transition_words = {
-            "Also": ["Furthermore", "Additionally", "Moreover"],
-            "But": ["However", "Nevertheless", "Nonetheless"],
-            "So": ["Therefore", "Consequently", "Thus"],
-            "And": ["Furthermore", "Additionally"],
-            "First": ["Initially", "Primarily"],
-            "Finally": ["In conclusion", "Ultimately"]
-        }
-        
-        self.common_phrases = [
-            "in fact", "as well", "as if", "as though", "in order to",
-            "due to", "because of", "in spite of", "in addition to",
-            "such as", "for example", "for instance", "in other words"
-        ]
-        
-        self.filler_sentences = [
-            "This analysis provides valuable insights.",
-            "These findings merit further consideration.",
-            "The implications are noteworthy.",
-            "This approach yields meaningful results.",
-            "The research demonstrates important aspects."
-        ]
-    
-    def rewrite_text(self, text: str, mode: str = 'balanced') -> Tuple[str, Optional[str]]:
+    def refine_text(self, text: str) -> str:
         """
-        Rewrite text with different modes of modification intensity
+        Refines text using the most powerful available local NLP tools.
         
         Args:
-            text: Input text to rewrite
-            mode: 'conservative', 'balanced', or 'aggressive' (default: 'balanced')
+            text: The input text to refine.
             
         Returns:
-            Tuple of (rewritten_text, error_message)
+            The refined text.
         """
         try:
-            # First apply basic refinement
-            refined_text = self._basic_refinement(text)
-            
-            # Apply mode-specific transformations
-            if mode == 'conservative':
-                return self._conservative_rewrite(refined_text), None
-            elif mode == 'balanced':
-                return self._balanced_rewrite(refined_text), None
-            elif mode == 'aggressive':
-                return self._aggressive_rewrite(refined_text), None
+            if self.advanced_features and self.nlp:
+                return self._advanced_refinement(text)
             else:
-                return refined_text, "Invalid mode specified"
-                
+                return self._nltk_refinement(text)
         except Exception as e:
-            logging.error(f"Error in text rewriting: {str(e)}")
-            return text, f"Rewrite error: {str(e)}"
-    
-    def _conservative_rewrite(self, text: str) -> str:
-        """Minimal modifications for light rewriting"""
-        sentences = self._split_sentences(text)
-        transformed = []
-        
-        for sentence in sentences:
-            # Apply conservative transformations
-            if random.random() < 0.3:
-                sentence = self._vary_sentence_structure(sentence, max_transformations=1)
-            if random.random() < 0.2:
-                sentence = self._replace_keywords(sentence, max_replacements=1)
-            
-            transformed.append(sentence)
-        
-        return " ".join(transformed)
-    
-    def _balanced_rewrite(self, text: str) -> str:
-        """Balanced modifications for natural rewriting"""
-        sentences = self._split_sentences(text)
-        transformed = []
-        
-        for sentence in sentences:
-            # Apply balanced transformations
-            if random.random() < 0.5:
-                sentence = self._vary_sentence_structure(sentence, max_transformations=2)
-            if random.random() < 0.4:
-                sentence = self._replace_keywords(sentence, max_replacements=2)
-            if random.random() < 0.3:
-                sentence = self._improve_academic_tone(sentence)
-            
-            transformed.append(sentence)
-        
-        # Occasionally add contextual filler
-        if len(transformed) > 1 and random.random() < 0.3:
-            filler = self._get_contextual_filler(transformed)
-            if filler:
-                insert_pos = random.randint(1, len(transformed))
-                transformed.insert(insert_pos, filler)
-        
-        return " ".join(transformed)
-    
-    def _aggressive_rewrite(self, text: str) -> str:
-        """More extensive modifications for heavy rewriting"""
-        sentences = self._split_sentences(text)
-        transformed = []
-        
-        for sentence in sentences:
-            # Apply aggressive transformations
-            if random.random() < 0.7:
-                sentence = self._vary_sentence_structure(sentence, max_transformations=3)
-            if random.random() < 0.6:
-                sentence = self._replace_keywords(sentence, max_replacements=3)
-            if random.random() < 0.5:
-                sentence = self._improve_academic_tone(sentence)
-            if random.random() < 0.4:
-                sentence = self._add_conversational_elements(sentence)
-            
-            transformed.append(sentence)
-        
-        # More likely to add contextual filler
-        if len(transformed) > 1 and random.random() < 0.5:
-            filler = self._get_contextual_filler(transformed)
-            if filler:
-                insert_pos = random.randint(1, len(transformed))
-                transformed.insert(insert_pos, filler)
-        
-        return " ".join(transformed)
-    
-    def _split_sentences(self, text: str) -> List[str]:
-        """Split text into sentences using NLTK"""
+            logger.error(f"Error during text refinement: {e}", exc_info=True)
+            return self._basic_refinement(text) # Fallback to basic regex cleaning
+
+    def _advanced_refinement(self, text: str) -> str:
+        """Refines text using spaCy for robust sentence detection and structure."""
         try:
-            return [s.strip() for s in sent_tokenize(text) if s.strip()]
-        except Exception:
-            return [s.strip() for s in re.split(r'[.!?]+', text) if s.strip()]
-    
-    def _vary_sentence_structure(self, sentence: str, max_transformations: int = 2) -> str:
-        """Vary sentence structure with limited transformations"""
-        if len(sentence.split()) < 4:
-            return sentence
+            doc = self.nlp(text)
+            sentences = [sent.text.strip() for sent in doc.sents]
+            
+            refined_sentences = [self._improve_sentence_structure(s) for s in sentences]
+            return " ".join(refined_sentences)
+        except Exception as e:
+            logger.warning(f"Advanced refinement failed, falling back to NLTK: {e}")
+            return self._nltk_refinement(text)
+
+    def _nltk_refinement(self, text: str) -> str:
+        """Refines text using NLTK for sentence tokenization."""
+        try:
+            sentences = sent_tokenize(text)
+            refined_sentences = [self._improve_sentence_structure(s) for s in sentences]
+            return " ".join(refined_sentences)
+        except Exception as e:
+            logger.warning(f"NLTK refinement failed, using basic refinement: {e}")
+            return self._basic_refinement(text)
+
+    def _improve_sentence_structure(self, sentence: str) -> str:
+        """Ensures basic sentence structure like capitalization."""
+        sentence = sentence.strip()
+        if not sentence:
+            return ""
+        # Capitalize the first letter of the sentence.
+        return sentence[0].upper() + sentence[1:]
+
+    def _basic_refinement(self, text: str) -> str:
+        """A fallback method that uses regular expressions for basic text cleanup."""
+        text = re.sub(r'\s+', ' ', text).strip()
+        # Ensure space after sentence-ending punctuation.
+        text = re.sub(r'([.!?])(\w)', r'\1 \2', text)
+        # Capitalize the start of the text.
+        if text:
+            text = text[0].upper() + text[1:]
+        return text
+
+
+class LocalSynonymRepository:
+    """
+    Provides context-aware synonyms using NLTK's WordNet.
+    Focuses on finding synonyms that are appropriate for the original word's context.
+    """
+
+    def get_synonym(self, word: str, pos_tag: Optional[str] = None) -> Optional[str]:
+        """
+        Finds a suitable synonym for a word, optionally filtered by part-of-speech.
         
-        transformations = [
-            self._add_transition_word,
-            self._rearrange_clauses,
-            self._convert_contractions,
+        Args:
+            word: The word to find a synonym for.
+            pos_tag: The NLTK part-of-speech tag (e.g., 'v' for verb, 'n' for noun).
+            
+        Returns:
+            A suitable synonym string or None if none is found.
+        """
+        clean_word = word.lower().strip()
+        if len(clean_word) < 4:
+            return None
+
+        wordnet_pos = self._get_wordnet_pos(pos_tag)
+
+        synsets = wordnet.synsets(clean_word, pos=wordnet_pos)
+        if not synsets:
+            return None
+
+        synonyms = []
+        for syn in synsets:
+            for lemma in syn.lemmas():
+                synonym = lemma.name().replace('_', ' ')
+                if synonym != clean_word and len(synonym.split()) == 1 and synonym.isalpha():
+                    synonyms.append(synonym)
+        
+        if synonyms:
+            word_len = len(clean_word)
+            filtered_synonyms = [s for s in synonyms if abs(len(s) - word_len) <= 3]
+            return random.choice(filtered_synonyms) if filtered_synonyms else random.choice(synonyms)
+        
+        return None
+
+    def _get_wordnet_pos(self, treebank_tag: Optional[str]) -> Optional[str]:
+        """Converts NLTK POS tags to WordNet's format (e.g., 'JJ' -> 'a')."""
+        if not treebank_tag: return None
+        if treebank_tag.startswith('J'): return wordnet.ADJ
+        if treebank_tag.startswith('V'): return wordnet.VERB
+        if treebank_tag.startswith('N'): return wordnet.NOUN
+        if treebank_tag.startswith('R'): return wordnet.ADV
+        return None
+
+
+class TextRewriteService:
+    """
+    Orchestrates the text rewriting process with different strategies.
+    Contains a specialized mode for academic writing with adjustable strength.
+    """
+    
+    def __init__(self):
+        self.refinement_repo = LocalRefinementRepository()
+        self.synonym_repo = LocalSynonymRepository()
+        self.detokenizer = TreebankWordDetokenizer()
+        logger.info("TextRewriteService initialized for academic rewriting.")
+
+    def rewrite_for_academic(self, text: str, strength: str = 'default') -> str:
+        """
+        Rewrites text using a strategy specifically tailored for academic papers.
+        
+        Args:
+            text: The input text.
+            strength: The intensity of rewriting ('default' or 'strong').
+            
+        Returns:
+            The rewritten text with an academic focus.
+        """
+        try:
+            is_strong = strength == 'strong'
+            
+            refined_text = self.refinement_repo.refine_text(text)
+            sentences = sent_tokenize(refined_text)
+            
+            transformed_sentences = []
+            for sentence in sentences:
+                # Apply transformations based on strength
+                sentence = self._apply_academic_transformations(sentence, is_strong)
+                transformed_sentences.append(sentence)
+
+            if len(transformed_sentences) > 2:
+                transformed_sentences = self._vary_sentence_complexity(transformed_sentences, is_strong)
+
+            return " ".join(s for s in transformed_sentences if s)
+
+        except Exception as e:
+            logger.error(f"Error in academic rewriting: {e}", exc_info=True)
+            return text
+
+    def _apply_academic_transformations(self, sentence: str, is_strong: bool) -> str:
+        """Applies a chain of academic transformations to a single sentence."""
+        
+        # Determine probability based on strength
+        prob_structure = 0.9 if is_strong else 0.6
+        prob_synonym = 0.9 if is_strong else 0.7
+        prob_phrasing = 0.7 if is_strong else 0.5
+        prob_paraphrase = 0.5 if is_strong else 0.0 # Only for strong
+
+        if random.random() < prob_structure:
+            sentence = self._vary_sentence_structure_academic(sentence, is_strong)
+        
+        if random.random() < prob_synonym:
+            sentence = self._replace_synonyms_academic(sentence, is_strong)
+        
+        if random.random() < prob_phrasing:
+            sentence = self._apply_formal_phrasing(sentence)
+
+        if is_strong and random.random() < prob_paraphrase:
+             sentence = self._paraphrase_sentence(sentence)
+        
+        return sentence
+
+    def _vary_sentence_structure_academic(self, sentence: str, is_strong: bool) -> str:
+        """Applies structural variations suitable for formal writing."""
+        sentence = self._expand_contractions(sentence)
+
+        transitions = [
+            "Furthermore,", "Additionally,", "Moreover,", "Notably,",
+            "Consequently,", "Therefore,", "Thus,", "Subsequently,"
         ]
         
-        # Apply up to max_transformations
-        transformations_applied = 0
-        while transformations_applied < max_transformations and transformations:
-            transformation = random.choice(transformations)
-            new_sentence = transformation(sentence)
-            if new_sentence != sentence:
-                sentence = new_sentence
-                transformations_applied += 1
-                # Remove used transformation to avoid duplicates
-                transformations.remove(transformation)
+        transition_prob = 0.25 if is_strong else 0.15
+        if random.random() < transition_prob and len(sentence.split()) > 5:
+            if not sentence.lower().startswith(tuple(t.lower() for t in transitions)):
+                transition = random.choice(transitions)
+                sentence = f"{transition} {sentence[0].lower()}{sentence[1:]}"
         
         return sentence
-    
-    def _add_transition_word(self, sentence: str) -> str:
-        """Add academic transition words to sentences"""
-        if not sentence[0].isupper():
-            return sentence
-        
-        # Reduced probability from original
-        if random.random() < 0.3:
-            transitions = [
-                "Furthermore, ", "Additionally, ", "Moreover, ",
-                "However, ", "Nevertheless, ", "Therefore, ",
-                "Consequently, ", "Interestingly, ", "Notably, "
-            ]
-            
-            transition = random.choice(transitions)
-            
-            # Handle quoted sentences
-            if sentence.strip().startswith('"'):
-                match = re.match(r'(\s*")', sentence)
-                quote_char = match.group(1)
-                rest_of_sentence = sentence[len(quote_char):]
-                return f'{quote_char}{transition}{rest_of_sentence.lower()}'
-            else:
-                return transition + sentence[0].lower() + sentence[1:]
-        
-        return sentence
-    
-    def _rearrange_clauses(self, sentence: str) -> str:
-        """Simple clause rearrangement with quality checks"""
-        if ', ' in sentence and sentence.count(',') == 1:
-            parts = sentence.split(', ', 1)
-            if len(parts) == 2 and random.random() < 0.3:
-                part1, part2 = parts
-                # Only rearrange if it makes sense
-                if (len(part1.split()) > 2 and len(part2.split()) > 2 and
-                    not any(w in part1.lower() for w in ['although', 'while', 'because'])):
-                    return f"{part2.capitalize()}, {part1.lower()}"
-        
-        return sentence
-    
-    def _convert_contractions(self, sentence: str) -> str:
-        """Expand contractions for academic formality"""
+
+    def _expand_contractions(self, sentence: str) -> str:
+        """Expands common contractions to their full form."""
         contractions = {
             "don't": "do not", "won't": "will not", "can't": "cannot",
             "isn't": "is not", "aren't": "are not", "wasn't": "was not",
             "weren't": "were not", "hasn't": "has not", "haven't": "have not",
             "wouldn't": "would not", "couldn't": "could not", "shouldn't": "should not",
             "it's": "it is", "that's": "that is", "there's": "there is",
-            "what's": "what is", "you're": "you are", "we're": "we are",
-            "they're": "they are"
+            "you're": "you are", "we're": "we are", "they're": "they are"
         }
-        
-        # Lower probability than original
-        if random.random() < 0.6:
-            for contraction, expansion in contractions.items():
-                if contraction in sentence.lower():
-                    # Case-sensitive replacement
-                    sentence = re.sub(re.escape(contraction), expansion, sentence, flags=re.IGNORECASE)
-                    break
-        
+        for contraction, expansion in contractions.items():
+            sentence = re.sub(r'\b' + re.escape(contraction) + r'\b', expansion, sentence, flags=re.IGNORECASE)
         return sentence
-    
-    def _replace_keywords(self, sentence: str, max_replacements: int = 2) -> str:
-        """Replace keywords with synonyms more conservatively"""
-        words = word_tokenize(sentence)
+
+    def _replace_synonyms_academic(self, sentence: str, is_strong: bool) -> str:
+        """Replaces words with context-aware synonyms."""
+        try:
+            words = word_tokenize(sentence)
+            pos_tags = nltk.pos_tag(words)
+        except Exception:
+            return sentence
+
+        modified_words = list(words)
+        # Modify a higher percentage of words in 'strong' mode
+        modification_ratio = 0.35 if is_strong else 0.20
+        max_modifications = max(1, int(len(words) * modification_ratio))
         modifications = 0
         
-        for i, word in enumerate(words):
-            if modifications >= max_replacements:
-                break
-                
-            clean_word = re.sub(r'[^\w]', '', word).lower()
+        replacement_prob = 0.40 if is_strong else 0.25
+
+        for i, (word, tag) in enumerate(pos_tags):
+            if modifications >= max_modifications: break
             
-            # Skip if too short, common, or part of phrase
-            if (len(clean_word) < 4 or 
-                self._is_common_word(clean_word) or
-                self._is_part_of_phrase(clean_word, sentence)):
-                continue
-            
-            # Lower probability than original
-            if random.random() < 0.3:
-                synonym = self._get_best_synonym(clean_word, sentence)
-                if synonym:
-                    new_word = self._preserve_word_format(word, synonym)
-                    words[i] = new_word
-                    modifications += 1
+            if tag.startswith(('J', 'V', 'N', 'R')) and len(word) > 3 and not self._is_common_academic_word(word):
+                if random.random() < replacement_prob:
+                    synonym = self.synonym_repo.get_synonym(word, pos_tag=tag)
+                    if synonym:
+                        modified_words[i] = self._preserve_word_format(words[i], synonym)
+                        modifications += 1
         
-        return self.detokenizer.detokenize(words)
-    
-    def _get_best_synonym(self, word: str, context: str) -> Optional[str]:
-        """Get the most appropriate synonym for a word in context"""
-        try:
-            synsets = wordnet.synsets(word)
-            if not synsets:
-                return None
-            
-            # Collect all suitable synonyms
-            synonyms = []
-            for syn in synsets[:2]:  # Only check first 2 synsets
-                for lemma in syn.lemmas():
-                    synonym = lemma.name().replace('_', ' ')
-                    if (synonym != word and 
-                        len(synonym.split()) == 1 and
-                        synonym.isalpha() and
-                        abs(len(synonym) - len(word)) <= 3 and
-                        not self._is_common_word(synonym)):
-                        synonyms.append(synonym)
-            
-            if not synonyms:
-                return None
-            
-            # Prefer synonyms that maintain similar meaning
-            for syn in synonyms:
-                if self._check_semantic_similarity(word, syn):
-                    return syn
-            
-            return random.choice(synonyms)
-            
-        except Exception:
-            return None
-    
-    def _check_semantic_similarity(self, word1: str, word2: str) -> bool:
-        """Check if two words are semantically similar"""
-        try:
-            synsets1 = wordnet.synsets(word1)
-            synsets2 = wordnet.synsets(word2)
+        return self.detokenizer.detokenize(modified_words)
 
-            # Check path similarity
-            max_sim = max(
-                (s1.path_similarity(s2) or 0)
-                for s1 in synsets1[:2]
-                for s2 in synsets2[:2]
-            )
-            return max_sim > 0.4  # Higher threshold than original
+    def _apply_formal_phrasing(self, sentence: str) -> str:
+        """Replaces simple words/phrases with more formal, academic alternatives."""
+        replacements = {
+            r'\b(use|uses)\b': "utilize", r'\b(show|shows)\b': "demonstrate",
+            r'\b(help|helps)\b': "facilitate", r'\b(get|gets)\b': "obtain",
+            r'\b(make|makes)\b': "establish", r'\b(think|thinks)\b': "consider",
+            r'\bvery\b': "considerably", r'\b(big|large)\b': "substantial",
+            r'\b(good)\b': "effective", r'\b(bad)\b': "detrimental",
+            r'\b(a lot of)\b': "numerous",
+        }
+        for pattern, replacement in replacements.items():
+            if re.search(pattern, sentence, re.IGNORECASE) and random.random() < 0.5:
+                return re.sub(pattern, replacement, sentence, count=1, flags=re.IGNORECASE)
+        return sentence
+        
+    def _paraphrase_sentence(self, sentence: str) -> str:
+        """(Strong mode only) Attempts to paraphrase by reordering clauses."""
+        if ', ' in sentence:
+            parts = sentence.split(', ', 1)
+            # Check for a dependent clause that can be moved
+            if len(parts) == 2 and len(parts[0].split()) > 3 and len(parts[1].split()) > 3:
+                # Simple check for introductory phrases
+                if parts[0].lower().startswith(('although', 'while', 'if', 'because', 'since')):
+                    # Reorder: "Clause, main." -> "Main clause."
+                    return f"{parts[1][0].upper()}{parts[1][1:]} {parts[0].lower()}"
+        return sentence
 
-        except Exception:
-            return False
-    
-    def _is_common_word(self, word: str) -> bool:
-        """Check if word is too common for replacement"""
+
+    def _vary_sentence_complexity(self, sentences: List[str], is_strong: bool) -> List[str]:
+        """Varies sentence length by combining short sentences or splitting long ones."""
+        if len(sentences) < 2: return sentences
+            
+        output_sentences = []
+        i = 0
+        
+        combine_prob = 0.3 if is_strong else 0.2
+        split_prob = 0.4 if is_strong else 0.0 # Only split in strong mode
+
+        while i < len(sentences):
+            current_sentence = sentences[i]
+            
+            # Attempt to split long sentences in strong mode
+            if is_strong and len(current_sentence.split()) > 25 and random.random() < split_prob:
+                split_point = self._find_split_point(current_sentence)
+                if split_point:
+                    part1 = current_sentence[:split_point].strip() + '.'
+                    part2 = current_sentence[split_point:].strip()
+                    part2 = part2[0].upper() + part2[1:] # Capitalize new sentence
+                    output_sentences.append(part1)
+                    output_sentences.append(part2)
+                    i += 1
+                    continue
+
+            # Attempt to combine with the next sentence
+            if i + 1 < len(sentences):
+                next_sentence = sentences[i+1]
+                if len(current_sentence.split()) < 12 and len(next_sentence.split()) < 12 and random.random() < combine_prob:
+                    conjunctions = ["and", "while", "whereas", "in addition to which"]
+                    combined = f"{current_sentence.rstrip('.')} {random.choice(conjunctions)} {next_sentence[0].lower()}{next_sentence[1:]}"
+                    output_sentences.append(combined)
+                    i += 2
+                    continue
+            
+            output_sentences.append(current_sentence)
+            i += 1
+        return output_sentences
+
+    def _find_split_point(self, sentence: str) -> Optional[int]:
+        """Finds a suitable point (like after a conjunction) to split a long sentence."""
+        words = sentence.split()
+        mid_point = len(words) // 2
+        
+        # Look for conjunctions or commas around the middle of the sentence
+        for i in range(mid_point, len(words) - 3):
+            if words[i].endswith(',') or words[i].lower() in ['and', 'but', 'however', 'therefore']:
+                # Return the character index
+                return len(" ".join(words[:i+1])) + 1
+        return None
+
+    def _preserve_word_format(self, original: str, replacement: str) -> str:
+        """Preserves capitalization of the original word."""
+        if original.isupper(): return replacement.upper()
+        if original.istitle(): return replacement.title()
+        return replacement
+
+    def _is_common_academic_word(self, word: str) -> bool:
+        """Checks if a word is a common term that should not be replaced."""
         common_words = {
-            "the", "and", "that", "this", "with", "have", "will", "been", 
-            "from", "they", "know", "want", "good", "much", "some", "time",
-            "very", "when", "come", "here", "just", "like", "long", "make",
-            "many", "over", "such", "take", "than", "them", "well", "were",
-            "work", "about", "could", "would", "there", "their", "which",
-            "should", "think", "where", "through", "because", "between",
-            "important", "different", "following", "around", "though",
-            "without", "another", "example", "however", "therefore"
+            "the", "and", "that", "this", "with", "for", "from", "was", "are", "is",
+            "research", "study", "analysis", "data", "method", "results",
+            "conclusion", "evidence", "theory", "model", "figure", "table",
+            "system", "process", "approach", "framework", "concept",
+            "significant", "demonstrate", "indicate", "suggest", "establish"
         }
         return word.lower() in common_words
-    
-    def _is_part_of_phrase(self, word: str, sentence: str) -> bool:
-        """Check if word is part of a common phrase"""
-        sentence_lower = sentence.lower()
-        for phrase in self.common_phrases:
-            if word in phrase and phrase in sentence_lower:
-                return True
-        return False
-    
-    def _preserve_word_format(self, original: str, replacement: str) -> str:
-        """Preserve capitalization and punctuation of original word"""
-        # Extract non-alphabetic characters
-        prefix = ''.join(c for c in original if not c.isalpha())
-        suffix = ''
-        core_word = original[len(prefix):]
-        
-        # Find suffix
-        if core_word:
-            suffix_start = len(core_word.rstrip(string.ascii_letters))
-            suffix = core_word[suffix_start:]
-            core_word = core_word[:suffix_start]
-        
-        # Apply capitalization
-        if core_word:
-            if core_word[0].isupper():
-                replacement = replacement.capitalize()
-            elif core_word.isupper():
-                replacement = replacement.upper()
-        
-        return prefix + replacement + suffix
-    
-    def _improve_academic_tone(self, sentence: str) -> str:
-        """Improve academic tone with precise word replacements"""
-        replacements = {
-            " and ": [" as well as ", " along with "],
-            " but ": [" however, ", " nevertheless, "],
-            " because ": [" since ", " as "],
-            " so ": [" therefore, ", " consequently, "],
-            " also ": [" additionally, ", " moreover, "],
-            " use ": [" utilize ", " employ "],
-            " show ": [" demonstrate ", " illustrate "],
-            " help ": [" facilitate ", " assist "],
-            " get ": [" obtain ", " acquire "],
-            " make ": [" create ", " produce "],
-            " find ": [" discover ", " identify "],
-            " very ": [" significantly ", " considerably "],
-            " big ": [" substantial ", " significant "],
-            " small ": [" minimal ", " limited "],
-            " good ": [" effective ", " beneficial "],
-            " bad ": [" detrimental ", " problematic "],
-            " new ": [" novel ", " recent "],
-            " old ": [" traditional ", " previous "],
-            " many ": [" numerous ", " several "],
-            " few ": [" limited ", " scarce "]
-        }
-        
-        replacements_made = 0
-        max_replacements = 2  # Fewer than original
-        
-        for old, new_options in replacements.items():
-            if replacements_made >= max_replacements:
-                break
-                
-            if old in sentence.lower() and random.random() < 0.3:  # Lower probability
-                new_phrase = random.choice(new_options)
-                sentence = re.sub(re.escape(old), new_phrase, sentence, count=1, flags=re.IGNORECASE)
-                replacements_made += 1
-        
-        return sentence
-    
-    def _add_conversational_elements(self, sentence: str) -> str:
-        """Add natural conversational elements sparingly"""
-        if len(sentence.split()) < 5:
-            return sentence
-            
-        # Reduced set of conversational elements
-        elements = [
-            ("You know, ", 0.1),  # phrase, probability
-            ("Well, ", 0.1),
-            ("Actually, ", 0.1),
-            (" I mean, ", 0.08),
-            (" basically, ", 0.08),
-            (" essentially, ", 0.08)
-        ]
-        
-        for phrase, prob in elements:
-            if random.random() < prob:
-                if phrase.endswith(", "):  # Starter phrase
-                    if not sentence.startswith(phrase.strip()):
-                        sentence = phrase + sentence[0].lower() + sentence[1:]
-                else:  # Middle phrase
-                    words = sentence.split()
-                    if len(words) > 4:
-                        insert_pos = random.randint(2, len(words) - 2)
-                        words.insert(insert_pos, phrase.strip())
-                        sentence = " ".join(words)
-                break  # Only add one per sentence
-        
-        return sentence
-    
-    def _get_contextual_filler(self, sentences: List[str]) -> str:
-        """Generate contextual filler that's actually relevant"""
-        if not sentences:
-            return ""
-        
-        # Extract meaningful keywords
-        keywords = self._extract_keywords(" ".join(sentences))
-        if not keywords:
-            return ""
-        
-        templates = [
-            "This highlights the importance of {keyword}.",
-            "The aspect of {keyword} deserves attention.",
-            "{keyword} plays a significant role here.",
-            "Regarding {keyword}, several factors apply.",
-            "The consideration of {keyword} is relevant."
-        ]
-        
-        template = random.choice(templates)
-        keyword = random.choice(keywords[:2])  # Use top keywords only
-        return template.format(keyword=keyword.capitalize())
-    
-    def _extract_keywords(self, text: str) -> List[str]:
-        """Extract meaningful keywords from text"""
-        words = re.findall(r'\b[a-zA-Z]{5,}\b', text.lower())
-        filtered = [w for w in words if not self._is_common_word(w)]
-        return sorted(set(filtered), key=lambda x: -text.lower().count(x))[:3]  # Top 3
-    
-    def _basic_refinement(self, text: str) -> str:
-        """Basic text cleanup and formatting"""
-        # Normalize whitespace
-        text = re.sub(r'\s+', ' ', text.strip())
-        
-        # Fix common punctuation issues
-        fixes = [
-            (r'[\s\r\n]+([,.!?;:])', r'\1'),  # Remove space before punctuation
-            (r'([.!?])\s*([a-z])', r'\1 \2'),  # Ensure space after sentence endings
-            (r'\bi\b', 'I'),  # Capitalize standalone 'i'
-            (r'\s+([)\]}])', r'\1'),  # Remove space before closing brackets
-            (r'([(\[{])\s+', r'\1'),  # Remove space after opening brackets
-            (r'\s{2,}', ' '),  # Replace multiple spaces
-        ]
-        
-        for pattern, replacement in fixes:
-            text = re.sub(pattern, replacement, text)
-        
-        # Capitalize sentences
-        sentences = re.split(r'([.!?]+)', text)
-        for i in range(0, len(sentences), 2):
-            if sentences[i]:
-                sentences[i] = sentences[i][0].upper() + sentences[i][1:]
-        
-        return ''.join(sentences)
 
-# Public interface functions
-def rewrite_text(text: str, mode: str = 'balanced') -> Tuple[str, Optional[str]]:
+# --- Public API Functions ---
+
+def rewrite_for_academic(text: str, strength: str = 'default') -> str:
     """
-    Rewrite text with specified intensity
+    High-level function to rewrite text for academic purposes.
     
     Args:
-        text: Input text to rewrite
-        mode: 'conservative', 'balanced', or 'aggressive'
+        text: The input text to rewrite.
+        strength: The intensity of rewriting ('default' or 'strong').
         
     Returns:
-        Tuple of (rewritten_text, error_message)
+        The rewritten text, tailored for an academic context.
     """
-    rewriter = TextRewriter()
-    return rewriter.rewrite_text(text, mode)
-
-def refine_text(text: str) -> Tuple[str, Optional[str]]:
-    """
-    Basic text refinement without extensive rewriting
+    if not text or not isinstance(text, str):
+        logger.warning("Input text is invalid. Returning an empty string.")
+        return ""
     
-    Args:
-        text: Input text to refine
-        
-    Returns:
-        Tuple of (refined_text, error_message)
-    """
-    rewriter = TextRewriter()
-    return rewriter._basic_refinement(text), None
+    if strength not in ['default', 'strong']:
+        logger.warning(f"Invalid strength '{strength}'. Using 'default'.")
+        strength = 'default'
 
-def get_synonym(word: str) -> Tuple[str, Optional[str]]:
-    """
-    Get synonym for a word with context checks
+    start_time = time.time()
+    logger.info(f"Starting academic rewrite with strength: {strength}...")
     
-    Args:
-        word: Word to find synonym for
-        
-    Returns:
-        Tuple of (synonym, error_message)
+    service = TextRewriteService()
+    rewritten_text = service.rewrite_for_academic(text, strength)
+    
+    duration = time.time() - start_time
+    logger.info(f"Academic rewrite completed in {duration:.2f} seconds.")
+    
+    return rewritten_text
+
+# --- Example Usage ---
+if __name__ == '__main__':
+    original_text = """
+    The study showed that the new method is very good. We think it's a big improvement. 
+    Researchers get better results with this approach. But, it's not perfect and has some problems. 
+    We can't ignore these issues. We'll work on them later. Although the system is complex, it offers many benefits.
     """
-    rewriter = TextRewriter()
-    synonym = rewriter._get_best_synonym(word.lower(), "")
-    return synonym if synonym else "", "No suitable synonym found"
+    
+    print("--- Original Text ---")
+    print(original_text)
+    print("\n" + "="*50 + "\n")
+    
+    print("--- Academic Rewrite (Default Strength) ---")
+    default_version = rewrite_for_academic(original_text, strength='default')
+    print(default_version)
+    print("\n" + "="*50 + "\n")
+
+    print("--- Academic Rewrite (Strong Strength) ---")
+    strong_version = rewrite_for_academic(original_text, strength='strong')
+    print(strong_version)
