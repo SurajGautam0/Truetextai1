@@ -875,7 +875,7 @@ class TextRewriteService:
 
 def rewrite_text(text: str, enhanced: bool = True) -> Tuple[str, Optional[str]]:
     """
-    Main function to rewrite text
+    Main function to rewrite text with academic style
     
     Args:
         text: Input text to rewrite
@@ -887,9 +887,19 @@ def rewrite_text(text: str, enhanced: bool = True) -> Tuple[str, Optional[str]]:
     try:
         service = TextRewriteService()
         if enhanced:
-            return service.rewrite_text_with_modifications(text)
+            result, err = service.rewrite_text_with_modifications(text)
+            if err:
+                return text, err
+            # Apply academic transformations to make it more scholarly
+            result = _apply_academic_transformations(result)
+            return result, None
         else:
-            return service.rewrite_text(text)
+            result, err = service.rewrite_text(text)
+            if err:
+                return text, err
+            # Apply academic transformations even in basic mode
+            result = _apply_academic_transformations(result)
+            return result, None
     except Exception as e:
         logger.error(f"Error in rewrite_text: {str(e)}")
         return text, f"Rewrite error: {str(e)}"
@@ -951,3 +961,180 @@ def refine_text(text: str) -> Tuple[str, Optional[str]]:
     """
     repo = LocalRefinementRepository()
     return repo.refine_text(text)
+
+def rewrite_text_academic(text: str) -> Tuple[str, Optional[str]]:
+    """
+    Rewrite text with academic tone and style
+    
+    Args:
+        text: Input text to rewrite with academic style
+        
+    Returns:
+        Tuple of (academically_rewritten_text, error_message)
+    """
+    try:
+        service = TextRewriteService()
+        
+        # First apply base rewriting
+        result, err = service.rewrite_text(text)
+        if err:
+            return text, err
+        
+        # Apply academic transformations
+        result = _apply_academic_transformations(result)
+        
+        return result, None
+    except Exception as e:
+        logger.error(f"Error in academic rewrite: {str(e)}")
+        return text, f"Academic rewrite error: {str(e)}"
+
+def _apply_academic_transformations(text: str) -> str:
+    """Apply academic writing transformations to text"""
+    
+    # Academic word replacements for more formal tone
+    academic_replacements = {
+        r'\bshow\b': 'demonstrate',
+        r'\bget\b': 'obtain',
+        r'\bfind\b': 'discover',
+        r'\bmake\b': 'establish',
+        r'\buse\b': 'utilize',
+        r'\bhelp\b': 'facilitate',
+        r'\bbig\b': 'significant',
+        r'\bsmall\b': 'minimal',
+        r'\bgood\b': 'favorable',
+        r'\bbad\b': 'adverse',
+        r'\bthing\b': 'element',
+        r'\bstuff\b': 'material',
+        r'\bway\b': 'method',
+        r'\bstart\b': 'commence',
+        r'\bend\b': 'conclude',
+        r'\btry\b': 'attempt',
+        r'\blook at\b': 'examine',
+        r'\bcheck\b': 'verify',
+        r'\btell\b': 'indicate',
+        r'\blet\b': 'permit',
+        r'\bput\b': 'place',
+        r'\btake\b': 'consider',
+        r'\bgive\b': 'provide',
+        r'\bkeep\b': 'maintain',
+        r'\bask\b': 'inquire',
+        r'\bsay\b': 'state',
+        r'\bthink\b': 'postulate',
+        r'\bknow\b': 'understand',
+        r'\bsee\b': 'observe',
+        r'\bdo\b': 'conduct',
+        r'\bgo\b': 'proceed',
+        r'\bcome\b': 'emerge',
+        r'\bturn\b': 'transform',
+        r'\bwork\b': 'function',
+        r'\bplay\b': 'serve',
+        r'\brun\b': 'operate',
+        r'\bmove\b': 'transition',
+        r'\bchange\b': 'modify',
+        r'\bbring\b': 'introduce',
+        r'\bhold\b': 'maintain',
+        r'\bmean\b': 'signify',
+        r'\bseem\b': 'appear',
+        r'\bfeel\b': 'perceive'
+    }
+    
+    # Academic phrase transformations
+    academic_phrases = {
+        r'\bI think\b': 'It is proposed that',
+        r'\bI believe\b': 'The evidence suggests that',
+        r'\bwe can see\b': 'it becomes evident that',
+        r'\bwe know\b': 'research indicates that',
+        r'\bthis shows\b': 'this demonstrates',
+        r'\bthis means\b': 'this implies',
+        r'\bin conclusion\b': 'consequently',
+        r'\bto sum up\b': 'in synthesis',
+        r'\bfirst of all\b': 'primarily',
+        r'\bsecond\b': 'furthermore',
+        r'\bthird\b': 'additionally',
+        r'\bfinally\b': 'ultimately',
+        r'\balso\b': 'moreover',
+        r'\bbut\b': 'however',
+        r'\bso\b': 'therefore',
+        r'\bbecause\b': 'due to the fact that',
+        r'\bsince\b': 'given that',
+        r'\bwhen\b': 'during the period when',
+        r'\bif\b': 'in the event that',
+        r'\bfor example\b': 'for instance',
+        r'\blike\b': 'such as',
+        r'\babout\b': 'regarding',
+        r'\bvery\b': 'particularly',
+        r'\breally\b': 'significantly',
+        r'\bquite\b': 'considerably',
+        r'\bmostly\b': 'predominantly',
+        r'\bmainly\b': 'principally',
+        r'\boften\b': 'frequently',
+        r'\busually\b': 'typically',
+        r'\balways\b': 'invariably',
+        r'\bnever\b': 'under no circumstances',
+        r'\bmaybe\b': 'potentially',
+        r'\bprobably\b': 'presumably',
+        r'\bcertainly\b': 'undoubtedly'
+    }
+    
+    # Apply word replacements
+    for pattern, replacement in academic_replacements.items():
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    
+    # Apply phrase transformations
+    for pattern, replacement in academic_phrases.items():
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    
+    # Add academic sentence starters
+    sentences = sent_tokenize(text)
+    if sentences:
+        academic_starters = [
+            "The research demonstrates that ",
+            "Analysis reveals that ",
+            "Studies indicate that ",
+            "Evidence suggests that ",
+            "Investigations show that ",
+            "The findings establish that ",
+            "Research indicates that ",
+            "The data demonstrates that "
+        ]
+        
+        # Randomly enhance some sentences with academic starters
+        enhanced_sentences = []
+        for i, sentence in enumerate(sentences):
+            if i < 3 and random.random() < 0.3:  # First few sentences, 30% chance
+                starter = random.choice(academic_starters)
+                # Make first word lowercase if adding starter
+                if sentence:
+                    sentence = sentence[0].lower() + sentence[1:]
+                sentence = starter + sentence
+            enhanced_sentences.append(sentence)
+        
+        text = " ".join(enhanced_sentences)
+    
+    # Add transitional phrases between sentences
+    sentences = sent_tokenize(text)
+    if len(sentences) > 1:
+        transitions = [
+            "Furthermore, ",
+            "Additionally, ",
+            "Moreover, ",
+            "Consequently, ",
+            "Subsequently, ",
+            "In addition, ",
+            "Nevertheless, ",
+            "Nonetheless, ",
+            "Therefore, ",
+            "Thus, "
+        ]
+        
+        enhanced_sentences = [sentences[0]]  # Keep first sentence as is
+        for i in range(1, len(sentences)):
+            if random.random() < 0.4:  # 40% chance to add transition
+                transition = random.choice(transitions)
+                enhanced_sentences.append(transition + sentences[i])
+            else:
+                enhanced_sentences.append(sentences[i])
+        
+        text = " ".join(enhanced_sentences)
+    
+    return text

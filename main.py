@@ -8,7 +8,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 # Importing core functions
-from rewriter import rewrite_text, get_synonym, refine_text
+from rewriter import rewrite_text, get_synonym, refine_text, rewrite_text_academic, rewrite_text_academic
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
@@ -69,12 +69,12 @@ rewriter_service = RewriterService()
 def home():
     return jsonify({
         "status": "running",
-        "message": "🚀 Welcome to the Text Rewriter & AI Detector Service!",
+        "message": "🚀 Welcome to the Academic Text Rewriter Service!",
         "features": {
             "rewrite": True,
+            "academic_rewrite": True,
             "synonym_lookup": True,
             "text_refinement": True,
-            "ai_detection": True,
             "offline_mode": True
         }
     })
@@ -86,9 +86,9 @@ def health():
         "server_time": time.time(),
         "features": {
             "rewriting": True,
+            "academic_rewriting": True,
             "synonym_search": True,
-            "text_refining": True,
-            "ai_detection": True
+            "text_refining": True
         },
         "version": "v3.1.0"
     })
@@ -210,6 +210,35 @@ def rewrite_only_handler():
         logger.error(f"❌ Exception in /rewrite_only: {str(e)}")
         return jsonify({"error": str(e), "success": False}), 500
 
+@app.route('/rewrite_academic', methods=['POST'])
+def rewrite_academic_handler():
+    try:
+        if not request.is_json:
+            return jsonify({"error": "Invalid content type. JSON required."}), 400
+
+        data = request.get_json()
+        text = data.get('text', '').strip()
+
+        if not text:
+            return jsonify({"error": "Missing 'text' field."}), 400
+
+        logger.info("🎓 Academic rewrite request")
+        rewritten, err = rewrite_text_academic(text)
+
+        if err:
+            return jsonify({"error": err, "success": False}), 500
+
+        return jsonify({
+            "original_text": text,
+            "rewritten_text": rewritten,
+            "style": "academic",
+            "success": True
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Exception in /rewrite_academic: {str(e)}")
+        return jsonify({"error": str(e), "success": False}), 500
+
 if __name__ == '__main__':
-    logger.info("🚀 Launching Text Rewriter & AI Detector API...")
+    logger.info("🚀 Launching Text Rewriter API...")
     app.run(host='0.0.0.0', port=5000, debug=True)

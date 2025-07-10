@@ -1,13 +1,12 @@
-# Text Rewriter & AI Detector Backend
+# Text Rewriter Backend
 
-A Flask-based backend service for text rewriting, refinement, and AI-generated text detection using local NLP tools.
+A Flask-based backend service for text rewriting, refinement, and synonym replacement using local NLP tools.
 
 ## Features
 
 - **Text Rewriting**: Advanced text rewriting with enhanced mode
 - **Synonym Replacement**: Intelligent synonym suggestions using WordNet
 - **Text Refinement**: Grammar correction and text improvement using spaCy and TextBlob
-- **AI Text Detection**: Multi-model ensemble detection of AI-generated content
 - **Local Processing**: All processing done locally without external API calls
 
 ## Installation
@@ -45,13 +44,6 @@ The server will run on `http://localhost:5000`
 - `POST /synonym` - Get synonym for a word
 - `POST /refine` - Refine text using local NLP tools
 
-### AI Detection
-
-- `GET /detect/models` - Get list of available detection models
-- `POST /detect` - Main AI detection endpoint (ensemble)
-- `POST /detect/single` - Single model detection
-- `POST /detect/segments` - Analyze text segments for AI detection
-
 ## Testing
 
 Run the test suite:
@@ -59,28 +51,32 @@ Run the test suite:
 ```bash
 python test_rewriter.py
 python test_humanization.py
-python test_detector_integration.py
 ```
 
-## AI Detection Usage Examples
+## Usage Examples
 
-### Basic Detection
+### Text Rewriting
+
 ```bash
-curl -X POST http://localhost:5000/detect \
+curl -X POST http://localhost:5000/rewrite \
   -H "Content-Type: application/json" \
-  -d '{"text": "Your text here", "use_ensemble": true}'
+  -d '{"text": "Your text here", "enhanced": true}'
 ```
 
-### Single Model Detection
+### Synonym Replacement
+
 ```bash
-curl -X POST http://localhost:5000/detect/single \
+curl -X POST http://localhost:5000/synonym \
   -H "Content-Type: application/json" \
-  -d '{"text": "Your text here", "model": "roberta-base-openai-detector"}'
+  -d '{"word": "example"}'
 ```
 
-### Get Available Models
+### Text Refinement
+
 ```bash
-curl http://localhost:5000/detect/models
+curl -X POST http://localhost:5000/refine \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Your text here"}'
 ```
 
 ## Dependencies
@@ -90,10 +86,5 @@ curl http://localhost:5000/detect/models
 - NLTK
 - spaCy
 - TextBlob
-- PyTorch
-- Transformers
 - NumPy
-- SciPy
-- Scikit-learn
-- Joblib
 - Requests
