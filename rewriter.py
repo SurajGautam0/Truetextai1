@@ -635,36 +635,34 @@ class TextRewriteService:
         return sentence
     
     def _add_conversational_elements(self, sentence: str) -> str:
-        """Add conversational elements to make text more human-like"""
+        """Add neutral professional elements instead of conversational ones"""
         if len(sentence.split()) < 5:
             return sentence
             
-        # Add conversational phrases
-        conversational_starters = [
-            "You know, ", "Well, ", "Actually, ", "Basically, ", "Essentially, ",
-            "I think ", "I believe ", "I feel like ", "It seems like ", "Apparently, ",
-            "Obviously, ", "Clearly, ", "Of course, ", "Naturally, ", "Obviously, ",
-            "In my opinion, ", "From what I understand, ", "As far as I can tell, "
+        # Add professional phrases instead of conversational ones
+        professional_starters = [
+            "The analysis suggests ", "The examination reveals ", "The investigation shows ",
+            "The research indicates ", "The study demonstrates ", "The findings suggest ",
+            "The data shows ", "The evidence indicates ", "The assessment reveals "
         ]
         
-        # Add conversational connectors
-        conversational_connectors = [
-            " you see, ", " I mean, ", " like, ", " sort of, ", " kind of, ",
-            " actually, ", " basically, ", " essentially, ", " obviously, ",
-            " clearly, ", " naturally, ", " of course, ", " well, "
+        # Add professional connectors
+        professional_connectors = [
+            " furthermore, ", " additionally, ", " consequently, ", " therefore, ",
+            " however, ", " nevertheless, ", " subsequently, ", " accordingly, "
         ]
         
-        # Add starter phrase
-        if random.random() < 0.25 and not sentence.startswith(("You know,", "Well,", "Actually,")): # Increased from 0.2
-            starter = random.choice(conversational_starters)
+        # Add starter phrase (reduced probability for natural flow)
+        if random.random() < 0.15 and not sentence.startswith(("The ", "Analysis ", "Research ")):
+            starter = random.choice(professional_starters)
             sentence = starter + sentence.lower()
         
-        # Add connector phrase in the middle
-        if random.random() < 0.2 and len(sentence.split()) > 8: # Increased from 0.15
+        # Add connector phrase in the middle (reduced probability)
+        if random.random() < 0.1 and len(sentence.split()) > 8:
             words = sentence.split()
             if len(words) > 4:
                 insert_pos = random.randint(2, len(words) - 2)
-                connector = random.choice(conversational_connectors)
+                connector = random.choice(professional_connectors)
                 words.insert(insert_pos, connector.strip())
                 sentence = " ".join(words)
         
@@ -710,43 +708,41 @@ class TextRewriteService:
         return sentence
     
     def _add_personal_touch(self, sentences: List[str]) -> List[str]:
-        """Add personal opinions and subjective language"""
+        """Add neutral professional language instead of personal touches"""
         if not sentences:
             return sentences
             
-        personal_phrases = [
-            "I find this quite interesting because",
-            "What's really fascinating to me is",
-            "I think this is particularly noteworthy since",
-            "From my perspective, this suggests",
-            "I believe this demonstrates",
-            "It seems to me that",
-            "I would argue that",
-            "In my experience, this indicates",
-            "I've noticed that",
-            "Personally, I think"
+        professional_phrases = [
+            "The analysis demonstrates that",
+            "The examination reveals that",
+            "The investigation indicates that",
+            "The research suggests that",
+            "The study shows that",
+            "The evidence points to",
+            "The findings establish that",
+            "The data indicates that"
         ]
         
-        # Add personal phrase to a random sentence
-        if random.random() < 0.4: # Increased from 0.3
+        # Add professional phrase to a random sentence (reduced probability)
+        if random.random() < 0.2:  # Reduced from 0.4
             target_idx = random.randint(0, len(sentences) - 1)
-            personal_phrase = random.choice(personal_phrases)
-            sentences[target_idx] = personal_phrase + " " + sentences[target_idx].lower()
+            professional_phrase = random.choice(professional_phrases)
+            sentences[target_idx] = professional_phrase + " " + sentences[target_idx].lower()
         
-        # Add opinion markers
-        opinion_markers = [
-            " in my opinion", " I believe", " I think", " I feel",
-            " it seems to me", " from what I can see", " as I see it"
-        ]
-        
+        # Remove any personal opinion markers that might have been added elsewhere
         for i, sentence in enumerate(sentences):
-            if random.random() < 0.2: # Increased from 0.15
-                marker = random.choice(opinion_markers)
-                # Insert before the last word
-                words = sentence.split()
-                if len(words) > 2:
-                    words.insert(-1, marker)
-                    sentences[i] = " ".join(words)
+            # Remove personal language patterns
+            sentence = re.sub(r'\bin my opinion\b', '', sentence, flags=re.IGNORECASE)
+            sentence = re.sub(r'\bI believe\b', 'The evidence suggests', sentence, flags=re.IGNORECASE)
+            sentence = re.sub(r'\bI think\b', 'The analysis indicates', sentence, flags=re.IGNORECASE)
+            sentence = re.sub(r'\bI feel\b', 'The assessment shows', sentence, flags=re.IGNORECASE)
+            sentence = re.sub(r'\bit seems to me\b', 'The data suggests', sentence, flags=re.IGNORECASE)
+            sentence = re.sub(r'\bfrom what I can see\b', 'The examination reveals', sentence, flags=re.IGNORECASE)
+            sentence = re.sub(r'\bas I see it\b', 'The analysis demonstrates', sentence, flags=re.IGNORECASE)
+            
+            # Clean up extra spaces
+            sentence = re.sub(r'\s{2,}', ' ', sentence).strip()
+            sentences[i] = sentence
         
         return sentences
     
@@ -989,37 +985,84 @@ def rewrite_text_academic(text: str) -> Tuple[str, Optional[str]]:
         return text, f"Academic rewrite error: {str(e)}"
 
 def _apply_academic_transformations(text: str) -> str:
-    """Apply academic writing transformations to text"""
+    """Apply neutral, professional third-person transformations to text"""
     
-    # Academic word replacements for more formal tone
-    academic_replacements = {
+    # Remove first-person references and convert to neutral third-person
+    first_person_replacements = {
+        r'\bI think\b': 'The analysis suggests',
+        r'\bI believe\b': 'The evidence indicates',
+        r'\bI feel\b': 'The assessment reveals',
+        r'\bI know\b': 'The research demonstrates',
+        r'\bI understand\b': 'The examination shows',
+        r'\bI realize\b': 'The investigation reveals',
+        r'\bI assume\b': 'The data suggests',
+        r'\bI suppose\b': 'The findings imply',
+        r'\bI consider\b': 'The evaluation indicates',
+        r'\bI find\b': 'The study reveals',
+        r'\bI discover\b': 'The research uncovers',
+        r'\bI notice\b': 'The observation shows',
+        r'\bI observe\b': 'The examination reveals',
+        r'\bI see\b': 'The analysis demonstrates',
+        r'\bmy opinion\b': 'the assessment',
+        r'\bmy view\b': 'the perspective',
+        r'\bmy experience\b': 'the documented experience',
+        r'\bmy research\b': 'the research',
+        r'\bmy study\b': 'the study',
+        r'\bmy analysis\b': 'the analysis',
+        r'\bmy findings\b': 'the findings',
+        r'\bmy work\b': 'the work',
+        r'\bour team\b': 'the research team',
+        r'\bour study\b': 'the study',
+        r'\bour research\b': 'the research',
+        r'\bour findings\b': 'the findings',
+        r'\bour analysis\b': 'the analysis',
+        r'\bour work\b': 'the work',
+        r'\bour approach\b': 'the approach',
+        r'\bour method\b': 'the method',
+        r'\bwe found\b': 'the investigation found',
+        r'\bwe discovered\b': 'the research discovered',
+        r'\bwe observed\b': 'the study observed',
+        r'\bwe analyzed\b': 'the analysis examined',
+        r'\bwe studied\b': 'the research examined',
+        r'\bwe examined\b': 'the investigation examined',
+        r'\bwe investigated\b': 'the study investigated',
+        r'\bwe conducted\b': 'the research conducted',
+        r'\bwe believe\b': 'the evidence suggests',
+        r'\bwe think\b': 'the analysis indicates',
+        r'\bwe consider\b': 'the evaluation suggests',
+        r'\bwe conclude\b': 'the findings conclude',
+        r'\bwe suggest\b': 'the results suggest',
+        r'\bwe propose\b': 'the research proposes',
+        r'\bwe recommend\b': 'the study recommends'
+    }
+    
+    # Professional word replacements for neutral tone
+    professional_replacements = {
         r'\bshow\b': 'demonstrate',
         r'\bget\b': 'obtain',
-        r'\bfind\b': 'discover',
-        r'\bmake\b': 'establish',
-        r'\buse\b': 'utilize',
-        r'\bhelp\b': 'facilitate',
-        r'\bbig\b': 'significant',
-        r'\bsmall\b': 'minimal',
-        r'\bgood\b': 'favorable',
-        r'\bbad\b': 'adverse',
+        r'\bfind\b': 'identify',
+        r'\bmake\b': 'create',
+        r'\buse\b': 'employ',
+        r'\bhelp\b': 'assist',
+        r'\bbig\b': 'substantial',
+        r'\bsmall\b': 'limited',
+        r'\bgood\b': 'effective',
+        r'\bbad\b': 'problematic',
         r'\bthing\b': 'element',
         r'\bstuff\b': 'material',
         r'\bway\b': 'method',
-        r'\bstart\b': 'commence',
+        r'\bstart\b': 'begin',
         r'\bend\b': 'conclude',
         r'\btry\b': 'attempt',
         r'\blook at\b': 'examine',
         r'\bcheck\b': 'verify',
         r'\btell\b': 'indicate',
-        r'\blet\b': 'permit',
         r'\bput\b': 'place',
         r'\btake\b': 'consider',
         r'\bgive\b': 'provide',
         r'\bkeep\b': 'maintain',
         r'\bask\b': 'inquire',
         r'\bsay\b': 'state',
-        r'\bthink\b': 'postulate',
         r'\bknow\b': 'understand',
         r'\bsee\b': 'observe',
         r'\bdo\b': 'conduct',
@@ -1027,82 +1070,125 @@ def _apply_academic_transformations(text: str) -> str:
         r'\bcome\b': 'emerge',
         r'\bturn\b': 'transform',
         r'\bwork\b': 'function',
-        r'\bplay\b': 'serve',
         r'\brun\b': 'operate',
         r'\bmove\b': 'transition',
         r'\bchange\b': 'modify',
         r'\bbring\b': 'introduce',
         r'\bhold\b': 'maintain',
         r'\bmean\b': 'signify',
-        r'\bseem\b': 'appear',
-        r'\bfeel\b': 'perceive'
+        r'\bseem\b': 'appear'
     }
     
-    # Academic phrase transformations
-    academic_phrases = {
-        r'\bI think\b': 'It is proposed that',
-        r'\bI believe\b': 'The evidence suggests that',
-        r'\bwe can see\b': 'it becomes evident that',
-        r'\bwe know\b': 'research indicates that',
+    # Neutral phrase transformations to remove personal language
+    neutral_phrases = {
         r'\bthis shows\b': 'this demonstrates',
-        r'\bthis means\b': 'this implies',
-        r'\bin conclusion\b': 'consequently',
-        r'\bto sum up\b': 'in synthesis',
-        r'\bfirst of all\b': 'primarily',
-        r'\bsecond\b': 'furthermore',
+        r'\bthis means\b': 'this indicates',
+        r'\bin conclusion\b': 'in summary',
+        r'\bto sum up\b': 'in conclusion',
+        r'\bfirst of all\b': 'initially',
+        r'\bsecond\b': 'subsequently',
         r'\bthird\b': 'additionally',
         r'\bfinally\b': 'ultimately',
-        r'\balso\b': 'moreover',
+        r'\balso\b': 'furthermore',
         r'\bbut\b': 'however',
         r'\bso\b': 'therefore',
-        r'\bbecause\b': 'due to the fact that',
+        r'\bbecause\b': 'due to',
         r'\bsince\b': 'given that',
-        r'\bwhen\b': 'during the period when',
-        r'\bif\b': 'in the event that',
+        r'\bwhen\b': 'when',
+        r'\bif\b': 'if',
         r'\bfor example\b': 'for instance',
         r'\blike\b': 'such as',
         r'\babout\b': 'regarding',
-        r'\bvery\b': 'particularly',
-        r'\breally\b': 'significantly',
-        r'\bquite\b': 'considerably',
-        r'\bmostly\b': 'predominantly',
+        r'\bvery\b': 'considerably',
+        r'\breally\b': 'notably',
+        r'\bquite\b': 'rather',
+        r'\bmostly\b': 'primarily',
         r'\bmainly\b': 'principally',
         r'\boften\b': 'frequently',
         r'\busually\b': 'typically',
-        r'\balways\b': 'invariably',
-        r'\bnever\b': 'under no circumstances',
-        r'\bmaybe\b': 'potentially',
-        r'\bprobably\b': 'presumably',
-        r'\bcertainly\b': 'undoubtedly'
+        r'\balways\b': 'consistently',
+        r'\bnever\b': 'not',
+        r'\bmaybe\b': 'possibly',
+        r'\bprobably\b': 'likely',
+        r'\bcertainly\b': 'clearly'
     }
     
-    # Apply word replacements
-    for pattern, replacement in academic_replacements.items():
+    # Apply first-person removal first
+    for pattern, replacement in first_person_replacements.items():
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
     
-    # Apply phrase transformations
-    for pattern, replacement in academic_phrases.items():
+    # Apply professional word replacements
+    for pattern, replacement in professional_replacements.items():
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
     
-    # Add academic sentence starters
+    # Apply neutral phrase transformations
+    for pattern, replacement in neutral_phrases.items():
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    
+    # Remove conversational elements and personal opinions
+    conversational_patterns = {
+        r'\bYou know,?\s*': '',
+        r'\bWell,?\s*': '',
+        r'\bActually,?\s*': '',
+        r'\bBasically,?\s*': '',
+        r'\bObviously,?\s*': '',
+        r'\bClearly,?\s*': '',
+        r'\bOf course,?\s*': '',
+        r'\bIn my opinion,?\s*': '',
+        r'\bPersonally,?\s*': '',
+        r'\bI think,?\s*': '',
+        r'\bI believe,?\s*': '',
+        r'\bI feel like\s*': '',
+        r'\bIt seems like\s*': 'It appears that',
+        r'\bFrom what I understand,?\s*': '',
+        r'\bAs far as I can tell,?\s*': '',
+        r'\bfrom my perspective,?\s*': '',
+        r'\bin my experience,?\s*': '',
+        r'\s+you see,?\s*': ' ',
+        r'\s+I mean,?\s*': ' ',
+        r'\s+like,?\s*': ' ',
+        r'\s+sort of,?\s*': ' ',
+        r'\s+kind of,?\s*': ' ',
+        r'\s+actually,?\s*': ' ',
+        r'\s+obviously,?\s*': ' ',
+        r'\s+clearly,?\s*': ' ',
+        r'\s+naturally,?\s*': ' ',
+        r'\s+of course,?\s*': ' ',
+        r'\s+well,?\s*': ' '
+    }
+    
+    # Remove conversational elements
+    for pattern, replacement in conversational_patterns.items():
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    
+    # Remove parenthetical asides that are too personal
+    personal_asides = [
+        r'\s*\(which is interesting\)', r'\s*\(I think\)', r'\s*\(you know\)',
+        r'\s*\(obviously\)', r'\s*\(basically\)', r'\s*\(essentially\)',
+        r'\s*\(more or less\)', r'\s*\(sort of\)', r'\s*\(kind of\)'
+    ]
+    
+    for pattern in personal_asides:
+        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+    
+    # Add professional sentence starters occasionally
     sentences = sent_tokenize(text)
     if sentences:
-        academic_starters = [
-            "The research demonstrates that ",
-            "Analysis reveals that ",
-            "Studies indicate that ",
-            "Evidence suggests that ",
-            "Investigations show that ",
-            "The findings establish that ",
-            "Research indicates that ",
-            "The data demonstrates that "
+        professional_starters = [
+            "The analysis demonstrates that ",
+            "The examination reveals that ",
+            "The investigation shows that ",
+            "The research indicates that ",
+            "The study establishes that ",
+            "The findings suggest that ",
+            "The data shows that "
         ]
         
-        # Randomly enhance some sentences with academic starters
+        # Occasionally add professional starters (reduced frequency for natural flow)
         enhanced_sentences = []
         for i, sentence in enumerate(sentences):
-            if i < 3 and random.random() < 0.3:  # First few sentences, 30% chance
-                starter = random.choice(academic_starters)
+            if i < 2 and random.random() < 0.2:  # Only first 2 sentences, low probability
+                starter = random.choice(professional_starters)
                 # Make first word lowercase if adding starter
                 if sentence:
                     sentence = sentence[0].lower() + sentence[1:]
@@ -1111,30 +1197,33 @@ def _apply_academic_transformations(text: str) -> str:
         
         text = " ".join(enhanced_sentences)
     
-    # Add transitional phrases between sentences
+    # Add subtle transitional phrases between sentences
     sentences = sent_tokenize(text)
     if len(sentences) > 1:
-        transitions = [
-            "Furthermore, ",
+        neutral_transitions = [
             "Additionally, ",
-            "Moreover, ",
-            "Consequently, ",
+            "Furthermore, ",
             "Subsequently, ",
-            "In addition, ",
-            "Nevertheless, ",
-            "Nonetheless, ",
+            "Consequently, ",
             "Therefore, ",
-            "Thus, "
+            "However, ",
+            "Nevertheless, ",
+            "Moreover, "
         ]
         
         enhanced_sentences = [sentences[0]]  # Keep first sentence as is
         for i in range(1, len(sentences)):
-            if random.random() < 0.4:  # 40% chance to add transition
-                transition = random.choice(transitions)
+            if random.random() < 0.25:  # Low probability for natural flow
+                transition = random.choice(neutral_transitions)
                 enhanced_sentences.append(transition + sentences[i])
             else:
                 enhanced_sentences.append(sentences[i])
         
         text = " ".join(enhanced_sentences)
+    
+    # Clean up any remaining formatting issues
+    text = re.sub(r'\s{2,}', ' ', text)  # Remove extra spaces
+    text = re.sub(r'\s+([,.!?;:])', r'\1', text)  # Remove spaces before punctuation
+    text = text.strip()
     
     return text
