@@ -8,7 +8,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 # Importing core functions
-from rewriter import rewrite_text, get_synonym, refine_text, rewrite_text_academic, rewrite_text_academic
+from rewriter import rewrite_text, get_synonym, refine_text, rewrite_text_academic
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)

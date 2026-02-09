@@ -265,7 +265,8 @@ class ProfessorGradeHumanizer:
                 connector = random.choice([" What this ultimately reveals is that ", 
                                          " One cannot overlook the fact that ", 
                                          " This perspective brings into focus "])
-                new_para = new_para.rstrip(".") + connector + new_para.split()[-12:].join(" ").lower() + "."
+                tail = " ".join(new_para.split()[-12:]).lower()
+                new_para = new_para.rstrip(".") + connector + tail + "."
             
             result_paras.append(new_para)
         
@@ -288,6 +289,57 @@ def rewrite_for_professor(text: str, intensity: str = "high") -> str:
     """
     humanizer = ProfessorGradeHumanizer()
     return humanizer.humanize(text, intensity)
+
+
+# ====================== BACKWARD-COMPAT API ======================
+
+def rewrite_text(text: str, enhanced: bool = True) -> Tuple[str, Optional[str]]:
+    """Compatibility wrapper used by main.py."""
+    try:
+        intensity = "high" if enhanced else "medium"
+        return rewrite_for_professor(text, intensity=intensity), None
+    except Exception as e:
+        return text, f"Rewrite error: {e}"
+
+
+def rewrite_text_academic(text: str) -> Tuple[str, Optional[str]]:
+    """Academic wrapper kept for existing endpoint compatibility."""
+    try:
+        return rewrite_for_professor(text, intensity="medium"), None
+    except Exception as e:
+        return text, f"Academic rewrite error: {e}"
+
+
+def refine_text(text: str) -> Tuple[str, Optional[str]]:
+    """Light refinement for existing /refine endpoint compatibility."""
+    try:
+        if not text:
+            return text, None
+        refined = re.sub(r"\s+", " ", text).strip()
+        refined = re.sub(r"\s+([,.!?;:])", r"\1", refined)
+        return refined, None
+    except Exception as e:
+        return text, f"Refine error: {e}"
+
+
+def get_synonym(word: str) -> Tuple[str, Optional[str]]:
+    """WordNet synonym lookup for existing /synonym endpoint compatibility."""
+    try:
+        w = (word or "").strip().lower()
+        if len(w) < 3:
+            return "", "Word too short"
+        synsets = wordnet.synsets(w)
+        options = []
+        for syn in synsets[:3]:
+            for lemma in syn.lemmas():
+                candidate = lemma.name().replace("_", " ")
+                if candidate != w and candidate.isalpha() and len(candidate.split()) == 1:
+                    options.append(candidate)
+        if not options:
+            return "", "No synonyms found"
+        return random.choice(options), None
+    except Exception as e:
+        return "", f"Synonym error: {e}"
 
 
 # Example / CLI
