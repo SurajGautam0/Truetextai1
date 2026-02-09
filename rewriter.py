@@ -413,11 +413,7 @@ class TextRewriteService:
                 
                 transformed.append(sentence)
             
-            # Convert final result from first person to third person for academic tone
-            final_result = " ".join(transformed)
-            final_result = self._convert_first_to_third_person(final_result)
-            
-            return final_result, None
+            return " ".join(transformed), None
             
         except Exception as e:
             logger.error(f"Error in enhanced rewriting: {str(e)}")
@@ -894,20 +890,12 @@ def rewrite_text(text: str, enhanced: bool = True) -> Tuple[str, Optional[str]]:
             result, err = service.rewrite_text_with_modifications(text)
             if err:
                 return text, err
-            # Apply academic transformations to make it more scholarly
-            result = _apply_academic_transformations(result)
-            # Convert from first person to third person for academic tone
-            result = service._convert_first_to_third_person(result)
             return result, None
-        else:
-            result, err = service.rewrite_text(text)
-            if err:
-                return text, err
-            # Apply academic transformations even in basic mode
-            result = _apply_academic_transformations(result)
-            # Convert from first person to third person for academic tone
-            result = service._convert_first_to_third_person(result)
-            return result, None
+
+        result, err = service.rewrite_text(text)
+        if err:
+            return text, err
+        return result, None
     except Exception as e:
         logger.error(f"Error in rewrite_text: {str(e)}")
         return text, f"Rewrite error: {str(e)}"
