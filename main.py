@@ -97,7 +97,7 @@ def health():
 def rewrite_handler():
     if request.method == 'GET':
         return jsonify({
-            "message": "📬 Send a POST request with JSON body: { 'text': ..., 'enhanced': true }"
+            "message": "Send a POST request with JSON body: { 'text': ..., 'enhanced': false }"
         })
 
     try:
@@ -106,7 +106,7 @@ def rewrite_handler():
 
         data = request.get_json()
         text = data.get('text', '').strip()
-        enhanced = data.get('enhanced', True)
+        enhanced = data.get('enhanced', False)
 
         if not text:
             return jsonify({"error": "Missing 'text' field in request."}), 400
@@ -188,7 +188,7 @@ def rewrite_only_handler():
 
         data = request.get_json()
         text = data.get('text', '').strip()
-        enhanced = data.get('enhanced', True)
+        enhanced = data.get('enhanced', False)
 
         if not text:
             return jsonify({"error": "Missing 'text' field."}), 400
@@ -242,3 +242,4 @@ def rewrite_academic_handler():
 if __name__ == '__main__':
     logger.info("🚀 Launching Text Rewriter API...")
     app.run(host='0.0.0.0', port=5000, debug=True)
+

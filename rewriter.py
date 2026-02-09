@@ -392,53 +392,26 @@ class TextRewriteService:
             return text, f"Rewriting error: {str(e)}"
     
     def rewrite_text_with_modifications(self, text: str) -> Tuple[str, Optional[str]]:
-        """Enhanced rewriting with comprehensive modifications to make text more human-like"""
+        """Enhanced rewriting that preserves meaning and avoids extra added content."""
         try:
             # Start with base rewriting
             base_result, err = self.rewrite_text(text)
             if err:
                 return text, err
             
-            # Apply additional enhancements with HIGHER probability
+            # Keep enhancements conservative so rewritten output stays close
+            # to the original and does not inject unrelated text.
             sentences = self._split_sentences(base_result)
             transformed = []
             
             for i, sentence in enumerate(sentences):
-                # Apply various transformations with INCREASED probability
-                if random.random() < 0.95:
+                # Low-impact transformations only
+                if random.random() < 0.35:
                     sentence = self._vary_sentence_structure(sentence)
-                if random.random() < 0.85:
+                if random.random() < 0.25:
                     sentence = self._replace_synonyms(sentence)
-                if random.random() < 0.75:
-                    sentence = self._add_natural_noise(sentence)
-                if random.random() < 0.6:
-                    sentence = self._add_conversational_elements(sentence)
-                if random.random() < 0.5:
-                    sentence = self._add_natural_imperfections(sentence)
                 
                 transformed.append(sentence)
-            
-            # More aggressive sentence reordering
-            if len(transformed) > 2 and random.random() < 0.6:  # Increased from 0.5
-                if len(transformed) > 3:
-                    middle = transformed[1:-1]
-                    random.shuffle(middle)
-                    transformed = [transformed[0]] + middle + [transformed[-1]]
-            
-            # More frequent contextual filler addition
-            if len(transformed) > 1 and random.random() < 0.6:  # Increased from 0.5
-                filler = self._get_contextual_filler(transformed)
-                if filler:
-                    # Insert at random position (not just end)
-                    insert_pos = random.randint(1, len(transformed))
-                    transformed.insert(insert_pos, filler)
-            
-            # New: Add personal opinions and subjective language
-            if random.random() < 0.4: # Increased from 0.3
-                transformed = self._add_personal_touch(transformed)
-            
-            # New: Vary sentence length and complexity
-            transformed = self._vary_sentence_complexity(transformed)
             
             # Convert final result from first person to third person for academic tone
             final_result = " ".join(transformed)
@@ -1027,7 +1000,7 @@ def rewrite_text_academic(text: str) -> Tuple[str, Optional[str]]:
         return text, f"Academic rewrite error: {str(e)}"
 
 def _apply_academic_transformations(text: str) -> str:
-    """Apply academic writing transformations to text"""
+    """Apply lightweight academic transformations without adding new sentences."""
     
     # Academic word replacements for more formal tone
     academic_replacements = {
@@ -1121,58 +1094,5 @@ def _apply_academic_transformations(text: str) -> str:
     # Apply phrase transformations
     for pattern, replacement in academic_phrases.items():
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
-    
-    # Add academic sentence starters
-    sentences = sent_tokenize(text)
-    if sentences:
-        academic_starters = [
-            "The research demonstrates that ",
-            "Analysis reveals that ",
-            "Studies indicate that ",
-            "Evidence suggests that ",
-            "Investigations show that ",
-            "The findings establish that ",
-            "Research indicates that ",
-            "The data demonstrates that "
-        ]
-        
-        # Randomly enhance some sentences with academic starters
-        enhanced_sentences = []
-        for i, sentence in enumerate(sentences):
-            if i < 3 and random.random() < 0.3:  # First few sentences, 30% chance
-                starter = random.choice(academic_starters)
-                # Make first word lowercase if adding starter
-                if sentence:
-                    sentence = sentence[0].lower() + sentence[1:]
-                sentence = starter + sentence
-            enhanced_sentences.append(sentence)
-        
-        text = " ".join(enhanced_sentences)
-    
-    # Add transitional phrases between sentences
-    sentences = sent_tokenize(text)
-    if len(sentences) > 1:
-        transitions = [
-            "Furthermore, ",
-            "Additionally, ",
-            "Moreover, ",
-            "Consequently, ",
-            "Subsequently, ",
-            "In addition, ",
-            "Nevertheless, ",
-            "Nonetheless, ",
-            "Therefore, ",
-            "Thus, "
-        ]
-        
-        enhanced_sentences = [sentences[0]]  # Keep first sentence as is
-        for i in range(1, len(sentences)):
-            if random.random() < 0.4:  # 40% chance to add transition
-                transition = random.choice(transitions)
-                enhanced_sentences.append(transition + sentences[i])
-            else:
-                enhanced_sentences.append(sentences[i])
-        
-        text = " ".join(enhanced_sentences)
     
     return text
