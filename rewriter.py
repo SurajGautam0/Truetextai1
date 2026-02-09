@@ -1,356 +1,296 @@
-import os
-import random
-import re
 import logging
-import time
-from typing import List, Tuple, Optional
+import re
+from typing import Dict, List, Optional, Tuple
 
-import nltk
-from nltk.tokenize import sent_tokenize, word_tokenize
-from nltk.corpus import wordnet
-from nltk.stem import WordNetLemmatizer
-
-# Try advanced NLP
 try:
-    import spacy
+    import nltk
+    from nltk.corpus import wordnet
+    from nltk.tokenize import sent_tokenize, word_tokenize
+except Exception:
+    nltk = None
+    wordnet = None
+    sent_tokenize = None
+    word_tokenize = None
+
+try:
     from textblob import TextBlob
-    SPACY_AVAILABLE = True
-except ImportError:
-    SPACY_AVAILABLE = False
-    print("spaCy/TextBlob not installed. Install with: pip install spacy textblob")
+except Exception:
+    TextBlob = None
 
-# Download NLTK data
-def setup_nltk():
-    packages = ['punkt', 'punkt_tab', 'wordnet', 'omw-1.4', 'averaged_perceptron_tagger']
-    for pkg in packages:
-        try:
-            nltk.data.find(f'tokenizers/{pkg}' if 'punkt' in pkg else f'corpora/{pkg}')
-        except LookupError:
-            print(f"Downloading {pkg}...")
-            nltk.download(pkg, quiet=True)
-
-setup_nltk()
-
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-lemmatizer = WordNetLemmatizer()
 
-# Rich academic / natural transition sets (avoid overused AI patterns)
-TRANSITIONS = {
-    "start": ["What stands out is", "One key observation is", "Interestingly,", "Importantly,",
-              "A central point here is", "It becomes evident that", "Notably,"],
-    "contrast": ["That said,", "However,", "Yet at the same time,", "Nevertheless,",
-                 "On the other hand,", "This contrasts with", "Despite this,"],
-    "addition": ["Beyond that,", "In the same vein,", "Equally significant is", "Moreover,",
-                 "Adding to this,", "Building on this idea,"],
-    "cause": ["This stems from", "Primarily because", "The reason lies in", "Given that", "Owing to"],
-    "result": ["As a result,", "Consequently,", "This naturally leads to", "It follows that"],
-    "example": ["For instance,", "A clear example is", "Consider how", "To illustrate,"],
-    "conclusion": ["Ultimately,", "In essence,", "Taken together,", "What this suggests is",
-                   "All of this points to"]
+# Keep replacements conservative to preserve meaning.
+CONTRACTIONS: Dict[str, str] = {
+    "can't": "cannot",
+    "won't": "will not",
+    "don't": "do not",
+    "doesn't": "does not",
+    "didn't": "did not",
+    "isn't": "is not",
+    "aren't": "are not",
+    "wasn't": "was not",
+    "weren't": "were not",
+    "hasn't": "has not",
+    "haven't": "have not",
+    "hadn't": "had not",
+    "it's": "it is",
+    "that's": "that is",
+    "there's": "there is",
+    "they're": "they are",
+    "we're": "we are",
+    "you're": "you are",
+}
+
+ACADEMIC_PHRASES: Dict[str, str] = {
+    r"\bin order to\b": "to",
+    r"\ba lot of\b": "many",
+    r"\bkind of\b": "somewhat",
+    r"\bsort of\b": "somewhat",
+    r"\bget\b": "obtain",
+    r"\bshow\b": "demonstrate",
+    r"\bhelp\b": "support",
+    r"\buse\b": "utilize",
+    r"\bfind out\b": "determine",
 }
 
 COMMON_WORDS = {
-    "the", "and", "that", "this", "with", "for", "are", "was", "were", "have", "has", "had",
-    "not", "but", "from", "they", "their", "them", "which", "who", "when", "where", "there",
-    "then", "than", "these", "those", "would", "could", "should", "will", "can", "may", "might"
+    "the", "and", "that", "this", "with", "from", "their", "there", "would",
+    "could", "should", "about", "which", "because", "however", "therefore",
 }
 
-class ProfessorGradeHumanizer:
-    """Advanced academic humanizer designed to defeat 2026 detectors while producing professor-ready text."""
-    
-    def __init__(self):
-        self.nlp = None
-        if SPACY_AVAILABLE:
-            try:
-                self.nlp = spacy.load("en_core_web_sm")
-                logger.info("spaCy loaded successfully")
-            except OSError:
-                logger.warning("Download spaCy model: python -m spacy download en_core_web_sm")
-        
-        random.seed(time.time() + os.getpid())
-    
-    def _get_synonym(self, word: str, pos: str = None) -> Optional[str]:
-        """Context-aware synonym with preference for less predictable (higher perplexity) words."""
-        if len(word) < 4 or word.lower() in COMMON_WORDS:
-            return None
-            
-        synsets = wordnet.synsets(word.lower())
-        candidates = []
-        
-        for syn in synsets[:4]:
-            for lemma in syn.lemmas()[:6]:
-                syn_word = lemma.name().replace('_', ' ')
-                if (syn_word.lower() != word.lower() and 
-                    len(syn_word.split()) == 1 and 
-                    syn_word.isalpha() and 
-                    3 <= len(syn_word) <= 14):
-                    # Prefer slightly rarer / more specific words for perplexity
-                    if len(syn_word) != len(word) or random.random() < 0.4:
-                        candidates.append(syn_word)
-        
-        if candidates:
-            # Bias toward longer or more precise words occasionally
-            return random.choice(candidates)
+PROTECTED_PATTERNS = [
+    r"https?://\\S+",
+    r"\[[^\]]+\]",            # [1], [Smith, 2020]
+    r"\([^()]*\d{4}[a-z]?[^()]*\)",
+]
+
+
+def _safe_sent_tokenize(text: str) -> List[str]:
+    if not text.strip():
+        return []
+    if sent_tokenize is not None:
+        try:
+            return [s.strip() for s in sent_tokenize(text) if s.strip()]
+        except Exception:
+            pass
+    return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+
+
+def _safe_word_tokenize(text: str) -> List[str]:
+    if word_tokenize is not None:
+        try:
+            return word_tokenize(text)
+        except Exception:
+            pass
+    return re.findall(r"\w+|[^\w\s]", text)
+
+
+def _detokenize(tokens: List[str]) -> str:
+    if not tokens:
+        return ""
+    text = " ".join(tokens)
+    text = re.sub(r"\s+([,.!?;:)\]])", r"\1", text)
+    text = re.sub(r"([([\"'])\s+", r"\1", text)
+    return text
+
+
+def _preserve_case(original: str, replacement: str) -> str:
+    if original.isupper():
+        return replacement.upper()
+    if original[:1].isupper():
+        return replacement.capitalize()
+    return replacement.lower()
+
+
+def _protect_spans(text: str) -> Tuple[str, Dict[str, str]]:
+    spans: Dict[str, str] = {}
+    protected = text
+    idx = 0
+
+    def repl(match: re.Match[str]) -> str:
+        nonlocal idx
+        key = f"__PROTECTED_{idx}__"
+        spans[key] = match.group(0)
+        idx += 1
+        return key
+
+    for pattern in PROTECTED_PATTERNS:
+        protected = re.sub(pattern, repl, protected)
+    return protected, spans
+
+
+def _restore_spans(text: str, spans: Dict[str, str]) -> str:
+    for key, value in spans.items():
+        text = text.replace(key, value)
+    return text
+
+
+def _expand_contractions(sentence: str) -> str:
+    out = sentence
+    for old, new in CONTRACTIONS.items():
+        out = re.sub(rf"\b{re.escape(old)}\b", new, out, flags=re.IGNORECASE)
+    return out
+
+
+def _apply_academic_phrasing(sentence: str) -> str:
+    out = sentence
+    for pattern, replacement in ACADEMIC_PHRASES.items():
+        out = re.sub(pattern, replacement, out, flags=re.IGNORECASE)
+    return out
+
+
+def _wordnet_synonym(word: str) -> Optional[str]:
+    if wordnet is None:
         return None
-    
-    def _force_burstiness(self, sentences: List[str]) -> List[str]:
-        """Create strong human-like variation in sentence length (core anti-detection feature)."""
-        if len(sentences) < 3:
-            return sentences
-            
-        result = []
-        i = 0
-        while i < len(sentences):
-            current = sentences[i].strip()
-            
-            # 35% chance to merge with next (creates longer sentences)
-            if (i + 1 < len(sentences) and 
-                random.random() < 0.35 and 
-                len(current.split()) < 22):
-                next_sent = sentences[i+1].strip()
-                conj = random.choice([", and yet ", " — ", "; however, ", ". Still, "])
-                merged = current.rstrip(".!?") + conj + next_sent[0].lower() + next_sent[1:]
-                result.append(merged)
-                i += 2
-                continue
-                
-            # 30% chance to split long sentences
-            if len(current.split()) > 24 and random.random() < 0.30:
-                words = current.split()
-                split_point = random.randint(max(8, len(words)//2 - 5), min(len(words)-6, len(words)//2 + 6))
-                part1 = " ".join(words[:split_point]).rstrip(".,") + random.choice([";", " —", ","])
-                part2 = " ".join(words[split_point:]).capitalize()
-                result.extend([part1, part2])
-                i += 1
-                continue
-                
-            result.append(current)
-            i += 1
-            
-        return result
-    
-    def _humanize_sentence(self, sentence: str) -> str:
-        """Core per-sentence transformation for perplexity + natural flow."""
-        if len(sentence.strip()) < 10:
-            return sentence.strip()
-            
-        # Basic cleanup + capitalization
-        sentence = sentence.strip()
-        if sentence and sentence[0].islower():
-            sentence = sentence[0].upper() + sentence[1:]
-        
-        # spaCy for smart POS-based replacements (best perplexity boost)
-        if self.nlp:
-            doc = self.nlp(sentence)
-            tokens = []
-            for token in doc:
-                word = token.text
-                if (token.pos_ in {"ADJ", "ADV", "VERB", "NOUN"} and 
-                    random.random() < 0.28 and 
-                    len(word) > 4):
-                    syn = self._get_synonym(word, token.pos_)
-                    if syn:
-                        # Preserve case
-                        if word[0].isupper():
-                            syn = syn.capitalize()
-                        word = syn
-                tokens.append(word)
-            sentence = " ".join(tokens)
-        else:
-            # Fallback NLTK word-level
-            words = word_tokenize(sentence)
-            for i, word in enumerate(words):
-                clean = re.sub(r'[^a-zA-Z]', '', word).lower()
-                if (len(clean) > 4 and 
-                    clean not in COMMON_WORDS and 
-                    random.random() < 0.25):
-                    syn = self._get_synonym(clean)
-                    if syn:
-                        words[i] = self._preserve_case(word, syn)
-            sentence = " ".join(words)
-        
-        # Occasional natural connectors / asides for human feel
-        if random.random() < 0.22:
-            aside = random.choice([" (quite remarkably)", " — or so it appears", ", to my mind,", 
-                                  " (and this matters)", " — importantly —"])
-            words = sentence.split()
-            if len(words) > 6:
-                pos = random.randint(2, len(words)-3)
-                words.insert(pos, aside)
-                sentence = " ".join(words)
-        
-        return sentence
-    
-    def _preserve_case(self, original: str, replacement: str) -> str:
-        if original.isupper():
-            return replacement.upper()
-        elif original[0].isupper():
-            return replacement.capitalize()
-        return replacement.lower()
-    
-    def _vary_transitions(self, sentences: List[str]) -> List[str]:
-        """Replace mechanical transitions with more natural academic ones."""
+    try:
+        synsets = wordnet.synsets(word.lower())
+        candidates: List[str] = []
+        for syn in synsets[:3]:
+            for lemma in syn.lemmas()[:6]:
+                value = lemma.name().replace("_", " ")
+                if (
+                    value.lower() != word.lower()
+                    and value.isalpha()
+                    and len(value.split()) == 1
+                    and 3 <= len(value) <= 14
+                ):
+                    candidates.append(value)
+        if not candidates:
+            return None
+        # Prefer close-length words to keep meaning stable.
+        candidates.sort(key=lambda w: abs(len(w) - len(word)))
+        return candidates[0]
+    except Exception:
+        return None
+
+
+def _replace_synonyms(sentence: str, max_changes: int = 1) -> str:
+    tokens = _safe_word_tokenize(sentence)
+    changes = 0
+
+    for i, token in enumerate(tokens):
+        if changes >= max_changes:
+            break
+        if not token.isalpha():
+            continue
+        lower = token.lower()
+        if len(lower) < 5 or lower in COMMON_WORDS:
+            continue
+
+        synonym = _wordnet_synonym(lower)
+        if not synonym:
+            continue
+
+        tokens[i] = _preserve_case(token, synonym)
+        changes += 1
+
+    return _detokenize(tokens)
+
+
+def _basic_cleanup(text: str) -> str:
+    text = re.sub(r"\s+", " ", text.strip())
+    text = re.sub(r"\s+([,.!?;:])", r"\1", text)
+    text = re.sub(r"([.!?])\s*([A-Za-z])", r"\1 \2", text)
+    return text
+
+
+def _sentence_polish(sentence: str, academic: bool, enhanced: bool) -> str:
+    s = sentence.strip()
+    if not s:
+        return s
+
+    # Optional grammar correction; keep lightweight.
+    if TextBlob is not None and len(s.split()) <= 40:
+        try:
+            corrected = str(TextBlob(s).correct())
+            if corrected:
+                s = corrected
+        except Exception:
+            pass
+
+    s = _expand_contractions(s)
+    if academic:
+        s = _apply_academic_phrasing(s)
+
+    if enhanced:
+        s = _replace_synonyms(s, max_changes=1)
+
+    if s and s[0].isalpha():
+        s = s[0].upper() + s[1:]
+    return _basic_cleanup(s)
+
+
+def _rewrite_core(text: str, enhanced: bool, academic: bool) -> str:
+    protected_text, spans = _protect_spans(text)
+
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", protected_text) if p.strip()]
+    out_paragraphs: List[str] = []
+
+    for paragraph in paragraphs:
+        sentences = _safe_sent_tokenize(paragraph)
         if not sentences:
-            return sentences
-            
-        for i in range(1, len(sentences)):
-            sent = sentences[i]
-            # Remove common AI-style starters
-            for bad in ["Furthermore", "Moreover", "Additionally", "In addition", "Also,"]:
-                if sent.strip().startswith(bad):
-                    sent = sent.replace(bad, "", 1).strip()
-                    break
-            
-            if random.random() < 0.45 and sent[0].isupper():
-                category = random.choice(list(TRANSITIONS.keys()))
-                starter = random.choice(TRANSITIONS[category])
-                sentences[i] = starter + " " + sent[0].lower() + sent[1:]
-        
-        return sentences
-    
-    def _academic_polish(self, text: str) -> str:
-        """Final academic tone enhancement without changing meaning."""
-        # Light formal upgrades (safe & natural)
-        polish_map = {
-            r'\bvery\b': 'particularly',
-            r'\bgood\b': 'effective',
-            r'\bbad\b': 'problematic',
-            r'\bthing\b': 'aspect',
-            r'\bstuff\b': 'elements',
-            r'\buse\b': 'employ',
-            r'\bhelp\b': 'facilitate',
-            r'\bshow\b': 'demonstrate',
-            r'\bget\b': 'obtain',
-            r'\bmake\b': 'generate'
-        }
-        
-        for old, new in polish_map.items():
-            text = re.sub(old, new, text, flags=re.IGNORECASE)
-        
-        return text
-    
-    def humanize(self, text: str, intensity: str = "high") -> str:
-        """Main entry point — produces professor-ready, highly humanized text."""
-        if not text or not text.strip():
-            return text
-            
-        intensity_map = {"low": 0.4, "medium": 0.65, "high": 0.9}
-        factor = intensity_map.get(intensity.lower(), 0.85)
-        
-        # Step 1: Split into sentences and paragraphs
-        paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
-        result_paras = []
-        
-        for para in paragraphs:
-            sentences = sent_tokenize(para)
-            
-            # Core humanization passes
-            processed = [self._humanize_sentence(s) for s in sentences]
-            
-            # Burstiness (most important anti-detection feature)
-            if random.random() < factor:
-                processed = self._force_burstiness(processed)
-            
-            # Transition variety
-            if random.random() < factor:
-                processed = self._vary_transitions(processed)
-            
-            # Final polish
-            new_para = " ".join(processed)
-            new_para = self._academic_polish(new_para)
-            
-            # Occasional paragraph-level reflection (adds depth & humanity)
-            if len(new_para.split()) > 60 and random.random() < 0.25 * factor:
-                connector = random.choice([" What this ultimately reveals is that ", 
-                                         " One cannot overlook the fact that ", 
-                                         " This perspective brings into focus "])
-                tail = " ".join(new_para.split()[-12:]).lower()
-                new_para = new_para.rstrip(".") + connector + tail + "."
-            
-            result_paras.append(new_para)
-        
-        final_text = "\n\n".join(result_paras)
-        
-        # Final global cleanup
-        final_text = re.sub(r'\s+', ' ', final_text)
-        final_text = re.sub(r'\s+([,.!?;:])', r'\1', final_text)
-        final_text = re.sub(r'([.!?])\s*([A-Z])', r'\1 \2', final_text)
-        
-        return final_text.strip()
+            out_paragraphs.append(_basic_cleanup(paragraph))
+            continue
 
+        polished = [_sentence_polish(s, academic=academic, enhanced=enhanced) for s in sentences]
+        out_paragraphs.append(" ".join(polished))
 
-# ====================== USAGE ======================
+    rebuilt = "\n\n".join(out_paragraphs)
+    rebuilt = _restore_spans(rebuilt, spans)
+    return _basic_cleanup(rebuilt)
 
-def rewrite_for_professor(text: str, intensity: str = "high") -> str:
-    """
-    One-call function to produce submission-ready academic text 
-    that strongly resists modern AI detectors.
-    """
-    humanizer = ProfessorGradeHumanizer()
-    return humanizer.humanize(text, intensity)
-
-
-# ====================== BACKWARD-COMPAT API ======================
 
 def rewrite_text(text: str, enhanced: bool = True) -> Tuple[str, Optional[str]]:
-    """Compatibility wrapper used by main.py."""
+    """Rewrite with clarity and flow improvements while preserving meaning."""
     try:
-        intensity = "high" if enhanced else "medium"
-        return rewrite_for_professor(text, intensity=intensity), None
+        if not text or not text.strip():
+            return text, None
+        return _rewrite_core(text, enhanced=enhanced, academic=False), None
     except Exception as e:
+        logger.exception("rewrite_text failed")
         return text, f"Rewrite error: {e}"
 
 
 def rewrite_text_academic(text: str) -> Tuple[str, Optional[str]]:
-    """Academic wrapper kept for existing endpoint compatibility."""
+    """Rewrite with formal academic phrasing and readability improvements."""
     try:
-        return rewrite_for_professor(text, intensity="medium"), None
+        if not text or not text.strip():
+            return text, None
+        return _rewrite_core(text, enhanced=True, academic=True), None
     except Exception as e:
+        logger.exception("rewrite_text_academic failed")
         return text, f"Academic rewrite error: {e}"
 
 
 def refine_text(text: str) -> Tuple[str, Optional[str]]:
-    """Light refinement for existing /refine endpoint compatibility."""
+    """Apply light refinement without paraphrasing."""
     try:
         if not text:
             return text, None
-        refined = re.sub(r"\s+", " ", text).strip()
-        refined = re.sub(r"\s+([,.!?;:])", r"\1", refined)
-        return refined, None
+        return _basic_cleanup(text), None
     except Exception as e:
+        logger.exception("refine_text failed")
         return text, f"Refine error: {e}"
 
 
 def get_synonym(word: str) -> Tuple[str, Optional[str]]:
-    """WordNet synonym lookup for existing /synonym endpoint compatibility."""
+    """Return one suitable WordNet synonym for a word."""
     try:
-        w = (word or "").strip().lower()
+        w = (word or "").strip()
         if len(w) < 3:
             return "", "Word too short"
-        synsets = wordnet.synsets(w)
-        options = []
-        for syn in synsets[:3]:
-            for lemma in syn.lemmas():
-                candidate = lemma.name().replace("_", " ")
-                if candidate != w and candidate.isalpha() and len(candidate.split()) == 1:
-                    options.append(candidate)
-        if not options:
+
+        synonym = _wordnet_synonym(w)
+        if not synonym:
             return "", "No synonyms found"
-        return random.choice(options), None
+        return synonym, None
     except Exception as e:
+        logger.exception("get_synonym failed")
         return "", f"Synonym error: {e}"
 
 
-# Example / CLI
 if __name__ == "__main__":
-    print("Professor-Grade AI Humanizer (2026-ready) loaded.\n")
-    sample = input("Paste your text (or press Enter for demo):\n")
-    if not sample.strip():
-        sample = "Artificial intelligence is transforming education in many ways. Students can now access personalized learning experiences. Teachers are also benefiting from new tools."
-    
-    result = rewrite_for_professor(sample, intensity="high")
-    print("\n" + "="*60)
-    print("REWRITTEN TEXT (ready for professor submission):")
-    print("="*60)
-    print(result)
+    sample = "AI tools can help students a lot, but they don't always improve understanding."
+    rewritten, err = rewrite_text_academic(sample)
+    print("Error:", err)
+    print("Output:", rewritten)
